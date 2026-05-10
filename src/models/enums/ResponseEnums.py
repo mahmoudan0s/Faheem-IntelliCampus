@@ -8,3 +8,6 @@ class ResponseSignal(str, Enum):
     
     FILE_VALIDATED_SUCCESS = "file_validated_success"
     FILE_VALIDATION_FAILED = "file_validation_failed"   
+
+    PROCESSING_SUCCESS = "processing_success"
+    PROCESSING_FAILED = "processing_failed"
