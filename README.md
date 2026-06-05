@@ -31,7 +31,16 @@ export PS1="\[\033[01;32m\]\u@\h:\w\n\[\033[00m\]\$ "
 ```bash
 $ pip install -r requirements.txt
 ```
-
+##Run Docker Compose Services
+```bash
+$ cd docker
+$ cp .env.example .env
+```
+```bash
+update .env with your credentials
+$ cd docker
+$ sudo docker compose up -d
+```
 ### Setup the environment variables
 
 ```bash
