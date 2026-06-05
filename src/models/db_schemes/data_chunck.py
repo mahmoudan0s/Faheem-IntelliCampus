@@ -9,6 +9,7 @@ class DataChunk(BaseModel):
     chunk_metadata: dict = Field(..., description="Metadata associated with the data chunk, such as source file, position in the file, etc.")
     chunk_order: int = Field(...,gt=0, description="The order of the chunk in the original file, starting from 0 for the first chunk")
     chunk_project_id: ObjectId
+    chunk_asset_id: ObjectId
 
     class Config:
         arbitrary_types_allowed = True # Allow ObjectId type to be used in the model

@@ -41,10 +41,8 @@ class AssetModel(BaseDataModel):
             "asset_type": asset_type,
         }).to_list(length=None)
 
-        return [
-            Asset(**record)
-            for record in records
-        ]
+        return [ Asset(**record) #to empty the _id field from the record and set it to the id field of the Asset model, which is defined as an alias for _id in the Asset model using Field(..., alias="_id")
+                for record in records]
 
     async def get_asset_record(self, asset_project_id: str, asset_name: str):
 
@@ -54,7 +52,7 @@ class AssetModel(BaseDataModel):
         })
 
         if record:
-            return Asset(**record)
+            return Asset(**record) #to empty the _id field from the record and set it to the id field of the Asset model, which is defined as an alias for _id in the Asset model using Field(..., alias="_id")
         
         return None
 

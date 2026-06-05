@@ -11,3 +11,5 @@ class ResponseSignal(str, Enum):
 
     PROCESSING_SUCCESS = "processing_success"
     PROCESSING_FAILED = "processing_failed"
+    NO_FILES_ERROR = "no_found_files"
+    FILE_ID_ERROR = "no file found with the provided file_id"
