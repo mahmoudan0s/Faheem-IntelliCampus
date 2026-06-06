@@ -5,7 +5,7 @@ import logging
 
 class CoHereProvider(LLMInterface):
 
-    def __init__(self, api_key: str,
+    def __init__(self, api_key: str, #without api_url because cohere doesn't have an api url, we will use the cohere python sdk to contact the cohere api, and the sdk will handle the api url internally.
                        default_input_max_characters: int=1000,
                        default_generation_max_output_tokens: int=1000,
                        default_generation_temperature: float=0.1):
