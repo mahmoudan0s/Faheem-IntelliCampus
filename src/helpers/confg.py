@@ -3,7 +3,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     APP_NAME: str
     APP_VERSION: str
-    OPENAI_API_KEY: str 
 
     FILE_ALLOWED_TYPES: list[str]
     FILE_MAX_SIZE_MB: int 
@@ -22,9 +21,9 @@ class Settings(BaseSettings):
     GENERATION_MODEL_ID: str = None
     EMBEDDING_MODEL_ID: str = None
     EMBEDDING_MODEL_SIZE: int = None
-    INPUT_DAFAULT_MAX_CHARACTERS: int = None
-    GENERATION_DAFAULT_MAX_TOKENS: int = None
-    GENERATION_DAFAULT_TEMPERATURE: float = None
+    INPUT_DEFAULT_MAX_CHARACTERS: int = None
+    GENERATION_DEFAULT_MAX_TOKENS: int = None
+    GENERATION_DEFAULT_TEMPERATURE: float = None
 
     VECTOR_DB_BACKEND : str
     VECTOR_DB_PATH : str
