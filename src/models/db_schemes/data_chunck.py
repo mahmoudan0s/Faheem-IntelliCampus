@@ -26,3 +26,7 @@ class DataChunk(BaseModel):
                 "unique": False #Allow multiple chunks to have the same chunk_project_id, as they belong to the same project
                }
             ]
+    
+class RetrievedDocument(BaseModel):
+    text: str
+    score: float #till now we only care about text and score 
