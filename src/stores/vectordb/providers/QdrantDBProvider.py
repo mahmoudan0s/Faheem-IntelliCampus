@@ -66,10 +66,11 @@ class QdrantDBProvider(VectorDBInterface):
             return False
         
         try:
-            _ = self.client.upload_records(
+            _ = self.client.upsert(
                 collection_name=collection_name,
                 records=[
                     models.Record(
+                        id=record_id,
                         vector=vector,
                         payload={ #data around the vector as metadata, we can use it later for filtering or retrieving the original text
                             "text": text, "metadata": metadata
@@ -91,7 +92,7 @@ class QdrantDBProvider(VectorDBInterface):
             metadata = [None] * len(texts)
 
         if record_ids is None:
-            record_ids = [None] * len(texts)
+            record_ids = list(range(len(texts)))
 
         for i in range(0, len(texts), batch_size):
             batch_end = i + batch_size
@@ -99,9 +100,11 @@ class QdrantDBProvider(VectorDBInterface):
             batch_texts = texts[i:batch_end]
             batch_vectors = vectors[i:batch_end]
             batch_metadata = metadata[i:batch_end]
+            batch_record_ids = record_ids[i:batch_end]
 
             batch_records = [
-                models.Record(
+                models.PointStruct(
+                    id=batch_record_ids[x],
                     vector=batch_vectors[x],
                     payload={
                         "text": batch_texts[x], "metadata": batch_metadata[x]
@@ -113,9 +116,9 @@ class QdrantDBProvider(VectorDBInterface):
 
             try: #we use batch insert to improve the performance of inserting large number of records, and also to reduce the number of requests to the server which 
                 #can help to avoid hitting rate limits and also to improve the overall performance of the application by reducing the latency of inserting records one by one.
-                _ = self.client.upload_records(
+                _ = self.client.upsert(
                     collection_name=collection_name,
-                    records=batch_records,
+                    points=batch_records,
                 )
             except Exception as e:
                 self.logger.error(f"Error while inserting batch: {e}")
@@ -125,8 +128,8 @@ class QdrantDBProvider(VectorDBInterface):
         
     def search_by_vector(self, collection_name: str, vector: list, limit: int = 5):
 
-        return self.client.search(
+        return self.client.query_points(
             collection_name=collection_name,
-            query_vector=vector,
+            query=vector,
             limit=limit
         )
