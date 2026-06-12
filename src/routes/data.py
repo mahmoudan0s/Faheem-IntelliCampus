@@ -138,7 +138,10 @@ async def process_endpoint(request: Request, project_id: str, process_request: P
             }
             )
 
-    process_controller = ProcessController(project_id=project_id)
+    process_controller = ProcessController(
+        project_id=project_id,
+        generation_client=request.app.generation_client,
+    )
 
     no_records = 0
     no_files=0
@@ -153,40 +156,29 @@ async def process_endpoint(request: Request, project_id: str, process_request: P
         )
 
     for asset_id, file_id in project_file_ids.items():
-        file_content = process_controller.get_file_content(file_id=file_id)
-
-        if file_content is None:
-            logger.error(f"error while processing file: {file_id}") # Log an error message if the file content could not be retrieved, but continue processing the other files instead of returning an error response immediately
-            continue
-
-        file_chunks = process_controller.process_file_content(
-            file_content=file_content,
+        file_chunks = process_controller.process_file(
             file_id=file_id,
             chunk_size=chunk_size,
             overlap=overlap_size
-        )   
+        )
 
         if file_chunks is None or len(file_chunks) == 0:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "signal": ResponseSignal.PROCESSING_FAILED.value
-                }
-            )
-        
+            logger.error(f"error while processing file: {file_id}")
+            continue
+
         file_chunks_records = [
             DataChunk(
                 chunk_text=chunk.page_content,
                 chunk_metadata=chunk.metadata,
                 chunk_order=i+1,
                 chunk_project_id=project.id,
-                chunk_asset_id=asset_id
+                chunk_asset_id=asset_id,
+                page=chunk.metadata.get("page"),
+                chunk_type=chunk.metadata.get("chunk_type", "text"),
+                source_file=chunk.metadata.get("source_file", file_id),
             )
             for i, chunk in enumerate(file_chunks)
         ]
-
-    
-
 
         no_records += await chunk_model.insert_many_chunks(chunks=file_chunks_records)
         no_files += 1

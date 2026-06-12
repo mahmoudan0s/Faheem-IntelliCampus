@@ -10,6 +10,9 @@ class DataChunk(BaseModel):
     chunk_order: int = Field(...,gt=0, description="The order of the chunk in the original file, starting from 0 for the first chunk")
     chunk_project_id: ObjectId
     chunk_asset_id: ObjectId
+    page: Optional[int] = Field(None, description="The page number where this chunk was extracted from")
+    chunk_type: Optional[str] = Field("text", description="Type of chunk: text, table, diagram, or chart")
+    source_file: Optional[str] = Field(None, description="Original source filename")
 
     class Config:
         arbitrary_types_allowed = True # Allow ObjectId type to be used in the model
@@ -29,4 +32,7 @@ class DataChunk(BaseModel):
     
 class RetrievedDocument(BaseModel):
     text: str
-    score: float #till now we only care about text and score 
+    score: float #till now we only care about text and score
+    chunk_type: Optional[str] = "text"
+    page: Optional[int] = None
+    source_file: Optional[str] = None

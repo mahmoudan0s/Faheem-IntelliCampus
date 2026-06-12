@@ -72,8 +72,12 @@ class QdrantDBProvider(VectorDBInterface):
                     models.Record(
                         id=record_id,
                         vector=vector,
-                        payload={ #data around the vector as metadata, we can use it later for filtering or retrieving the original text
-                            "text": text, "metadata": metadata
+                        payload={
+                            "text": text,
+                            "metadata": metadata,
+                            "page": metadata.get("page") if metadata else None,
+                            "chunk_type": metadata.get("chunk_type") if metadata else "text",
+                            "source_file": metadata.get("source_file") if metadata else None,
                         }
                     )
                 ]
@@ -107,15 +111,18 @@ class QdrantDBProvider(VectorDBInterface):
                     id=batch_record_ids[x],
                     vector=batch_vectors[x],
                     payload={
-                        "text": batch_texts[x], "metadata": batch_metadata[x]
+                        "text": batch_texts[x],
+                        "metadata": batch_metadata[x],
+                        "page": batch_metadata[x].get("page") if batch_metadata[x] else None,
+                        "chunk_type": batch_metadata[x].get("chunk_type") if batch_metadata[x] else "text",
+                        "source_file": batch_metadata[x].get("source_file") if batch_metadata[x] else None,
                     }
                 )
 
                 for x in range(len(batch_texts))
             ]
 
-            try: #we use batch insert to improve the performance of inserting large number of records, and also to reduce the number of requests to the server which 
-                #can help to avoid hitting rate limits and also to improve the overall performance of the application by reducing the latency of inserting records one by one.
+            try:
                 _ = self.client.upsert(
                     collection_name=collection_name,
                     points=batch_records,
@@ -140,6 +147,9 @@ class QdrantDBProvider(VectorDBInterface):
             RetrievedDocument(**{
                 "score": res.score,
                 "text": res.payload["text"],
+                "chunk_type": res.payload.get("chunk_type", "text"),
+                "page": res.payload.get("page"),
+                "source_file": res.payload.get("source_file"),
             }
             )
             for res in results.points

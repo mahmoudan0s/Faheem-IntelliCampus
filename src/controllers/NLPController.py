@@ -101,7 +101,7 @@ class NLPController(BaseController):
         )
 
         if not retrieved_documents or len(retrieved_documents) == 0:
-            return answer, full_prompt, chat_history
+            return answer, full_prompt, chat_history, []
         
         # step2: Construct LLM prompt
         system_prompt = self.template_parser.get("rag", "system_prompt")
@@ -132,5 +132,5 @@ class NLPController(BaseController):
             chat_history=chat_history
         )
 
-        return answer, full_prompt, chat_history
+        return answer, full_prompt, chat_history, retrieved_documents
         
