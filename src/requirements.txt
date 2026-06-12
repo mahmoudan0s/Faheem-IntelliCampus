@@ -12,3 +12,5 @@ openai==1.35.13
 cohere==5.5.8
 qdrant-client==1.18.0
 groq==1.0.0
+pytesseract==0.3.13
+Pillow==11.1.0

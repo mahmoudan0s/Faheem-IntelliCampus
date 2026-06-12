@@ -1,8 +1,11 @@
 from .BaseController import BaseController
 from .ProjectController import ProjectController
 import os
+from PIL import Image
+import pytesseract
 from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_core.documents import Document
 from models.enums.ProcessingEnums import ProcessingEnum
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from models import ProcessingEnum
@@ -29,6 +32,8 @@ class ProcessController(BaseController):
             return TextLoader(file_path, encoding='utf-8')
         elif file_extension == ProcessingEnum.PDF.value:
             return PyMuPDFLoader(file_path)
+        elif file_extension in [ProcessingEnum.PNG.value, ProcessingEnum.JPG.value, ProcessingEnum.JPEG.value, ProcessingEnum.BMP.value]:
+            return self._ocr_loader(file_path)
         
         return None
 
@@ -41,9 +46,16 @@ class ProcessController(BaseController):
             raise ValueError(f"Unsupported file type: {file_extension}")'''
         
 
-    def get_file_content(self, file_id: str):         
-        loader=self.get_file_loader(file_id=file_id)
-        return loader.load() if loader else None
+    def _ocr_loader(self, file_path: str):
+        img = Image.open(file_path)
+        text = pytesseract.image_to_string(img, lang='ara+eng')
+        return [Document(page_content=text, metadata={"source": file_path})]
+
+    def get_file_content(self, file_id: str):
+        loader = self.get_file_loader(file_id=file_id)
+        if loader is None:
+            return None
+        return loader.load() if hasattr(loader, 'load') else loader
     
         #it returns '''the content''' of the file as a list of documents,
         # where each document is a dictionary with a "page_content"
