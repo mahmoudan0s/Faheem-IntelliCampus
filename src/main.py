@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from helpers.confg import get_settings
 from stores.llm.LLMProviderFactory import LLMProviderFactory
 from stores.vectordb.VectorDBProviderFactory import VectorDBProviderFactory
+from stores.llm.templates.template_parser import TemplateParser
 
 app = FastAPI()
 
@@ -31,8 +32,10 @@ async def startup_span():
         )
     app.vectordb_client.connect()
 
-
-
+    app.template_parser = TemplateParser(  
+        language=settings.PRIMARY_LANG,
+        default_language=settings.DEFAULT_LANG,
+    )
 
 #@app.on_event("shutdown")
 async def shutdown_span():
