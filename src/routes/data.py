@@ -7,6 +7,7 @@ from controllers import DataController, ProjectController, ProcessController
 import aiofiles
 from models import ResponseSignal
 import logging
+import asyncio
 from .schemes.data import ProcessRequest
 from models.ProjectModel import ProjectModel
 from models.ChunkModel import ChunkModel
@@ -105,7 +106,7 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
     project_file_ids= {}
     if process_request.file_id is not None:
         asset_record = await asset_model.get_asset_record(
-            asset_project_id=project.asset_id,
+            asset_project_id=project.project_id,
             asset_name=process_request.file_id
         )
         if asset_record is None:
@@ -156,7 +157,8 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
         )
 
     for asset_id, file_id in project_file_ids.items():
-        file_chunks = process_controller.process_file(
+        file_chunks = await asyncio.to_thread(
+            process_controller.process_file,
             file_id=file_id,
             chunk_size=chunk_size,
             overlap=overlap_size

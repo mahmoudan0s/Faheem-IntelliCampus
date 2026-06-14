@@ -5,7 +5,7 @@ from models.ProjectModel import ProjectModel
 from models.ChunkModel import ChunkModel
 from controllers import NLPController
 from models import ResponseSignal
-
+import asyncio
 import logging
 
 logger = logging.getLogger('uvicorn.error')
@@ -63,7 +63,8 @@ async def index_project(request: Request, project_id: int, push_request: PushReq
         chunks_ids =  list(range(idx, idx + len(page_chunks)))
         idx += len(page_chunks)
         
-        is_inserted = nlp_controller.index_into_vector_db(
+        is_inserted = await asyncio.to_thread(
+            nlp_controller.index_into_vector_db,
             project=project,
             chunks=page_chunks,
             do_reset=push_request.do_reset,
@@ -105,7 +106,9 @@ async def get_project_index_info(request: Request, project_id: int):
         template_parser=request.app.template_parser,
     )
 
-    collection_info = nlp_controller.get_vector_db_collection_info(project=project)
+    collection_info = await asyncio.to_thread(
+        nlp_controller.get_vector_db_collection_info, project=project
+    )
 
     return JSONResponse(
         content={
@@ -132,7 +135,8 @@ async def search_index(request: Request, project_id: int, search_request: Search
         template_parser=request.app.template_parser
     )
 
-    results = nlp_controller.search_vector_db_collection(
+    results = await asyncio.to_thread(
+        nlp_controller.search_vector_db_collection,
         project=project, text=search_request.text, limit=search_request.limit
     )
 
@@ -168,7 +172,8 @@ async def answer_rag(request: Request, project_id: int, search_request: SearchRe
         embedding_client=request.app.embedding_client,
         template_parser=request.app.template_parser,
     )
-    answer, full_prompt, chat_history, retrieved_documents = nlp_controller.answer_rag_question(
+    answer, full_prompt, chat_history, retrieved_documents = await asyncio.to_thread(
+        nlp_controller.answer_rag_question,
         project=project,
         query=search_request.text,
         limit=search_request.limit,
