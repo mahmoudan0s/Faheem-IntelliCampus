@@ -105,7 +105,7 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
     project_file_ids= {}
     if process_request.file_id is not None:
         asset_record = await asset_model.get_asset_record(
-            asset_project_id=project.project_id,
+            asset_project_id=project.asset_id,
             asset_name=process_request.file_id
         )
         if asset_record is None:
@@ -120,7 +120,7 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
     else:
         
         project_files= await asset_model.get_all_project_assets(
-            asset_project_id=project.project_id,
+            asset_project_id=project.asset_id,
             asset_type=AssetTypeEnum.FILE.value,
         )
         
@@ -173,6 +173,9 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
                 chunk_order=i+1,
                 chunk_project_id=project.project_id,
                 chunk_asset_id=asset_id,
+                page=chunk.metadata.get("page"),
+                chunk_type=chunk.metadata.get("chunk_type", "text"),
+                source_file=chunk.metadata.get("source_file", file_id),
             )
             for i, chunk in enumerate(file_chunks)
         ]
