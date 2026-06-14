@@ -99,7 +99,7 @@ class OpenAIProvider(LLMInterface):
     def construct_prompt(self, prompt: str, role: str):
         return { # role is to help the provider understand the context of the prompt. content is the actual prompt that will be processed by the provider.
             "role": role,
-            "content": self.process_text(prompt)
+            "content": prompt
         }
     
 
