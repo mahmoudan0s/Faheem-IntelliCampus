@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     OPENAI_API_URL: str = None
     COHERE_API_KEY: str = None
     GROQ_API_KEY: str = None
+    HUGGINGFACE_API_KEY: str = None
 
     Generation_Model_ID_Literal : List[str] = None
     GENERATION_MODEL_ID: str = None

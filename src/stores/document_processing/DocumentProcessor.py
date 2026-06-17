@@ -2,7 +2,7 @@ import os
 import fitz
 import logging
 from langchain_core.documents import Document
-from .extractors import TextExtractor, OCRExtractor, TableExtractor, DiagramExtractor, ChartExtractor
+from .extractors import TextExtractor, OCRExtractor, TableExtractor, VisualExtractor
 
 
 fitz.TOOLS.mupdf_display_errors(False)
@@ -19,8 +19,7 @@ class DocumentProcessor:
         self.text_extractor = TextExtractor(chunk_size, overlap)
         self.ocr_extractor = OCRExtractor()
         self.table_extractor = TableExtractor()
-        self.diagram_extractor = DiagramExtractor(generation_client)
-        self.chart_extractor = ChartExtractor(generation_client)
+        self.visual_extractor = VisualExtractor(generation_client)
 
     def process(self, file_path: str, file_id: str) -> list:
         ext = os.path.splitext(file_id)[-1].lower()
@@ -74,17 +73,11 @@ class DocumentProcessor:
         if not ocr_text or not ocr_text.strip():
             return []
 
-        diagram_chunk = self.diagram_extractor.process_image_text(
+        visual_chunk = self.visual_extractor.process_image_text(
             ocr_text, file_id, page_num=1
         )
-        if diagram_chunk:
-            return [diagram_chunk]
-
-        chart_chunk = self.chart_extractor.process_image_text(
-            ocr_text, file_id, page_num=1
-        )
-        if chart_chunk:
-            return [chart_chunk]
+        if visual_chunk:
+            return [visual_chunk]
 
         return [
             Document(
@@ -134,6 +127,9 @@ class DocumentProcessor:
                 try:
                     base_image = doc.extract_image(xref)
                     img_bytes = base_image["image"]
+                    img = Image.open(io.BytesIO(img_bytes))
+                    if img.width * img.height < 10000:
+                        continue
                 except Exception:
                     logger.warning(f"Failed to extract image {xref} on page {page_num + 1}")
                     continue
@@ -142,18 +138,11 @@ class DocumentProcessor:
                 if not ocr_text or not ocr_text.strip():
                     continue
 
-                diagram_chunk = self.diagram_extractor.process_image_text(
+                visual_chunk = self.visual_extractor.process_image_text(
                     ocr_text, file_id, page_num=page_num + 1
                 )
-                if diagram_chunk:
-                    chunks.append(diagram_chunk)
-                    continue
-
-                chart_chunk = self.chart_extractor.process_image_text(
-                    ocr_text, file_id, page_num=page_num + 1
-                )
-                if chart_chunk:
-                    chunks.append(chart_chunk)
+                if visual_chunk:
+                    chunks.append(visual_chunk)
 
         doc.close()
         return chunks

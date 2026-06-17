@@ -4,6 +4,7 @@ class LLMEnums(Enum):
     OPENAI = "OPENAI"
     COHERE = "COHERE"
     GROQ = "GROQ"
+    HUGGINGFACE = "HUGGINGFACE"
 
 class OpenAIEnums(Enum):
     SYSTEM = "system"
@@ -21,6 +22,11 @@ class CoHereEnums(Enum):
 class GroqEnums(Enum):
     SYSTEM = "system"
     USER =  "user"
+    ASSISTANT = "assistant"
+
+class HuggingFaceEnums(Enum):
+    SYSTEM = "system"
+    USER = "user"
     ASSISTANT = "assistant"
     
 
