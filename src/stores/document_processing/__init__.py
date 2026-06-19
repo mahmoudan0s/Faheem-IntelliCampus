@@ -1,1 +1,3 @@
 from .DocumentProcessor import DocumentProcessor
+from .KnowledgeBaseProcessor import KnowledgeBaseProcessor
+from .ChatAttachmentProcessor import ChatAttachmentProcessor

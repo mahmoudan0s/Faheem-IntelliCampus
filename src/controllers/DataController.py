@@ -11,18 +11,20 @@ class DataController(BaseController):
         super().__init__()
         self.size_scale= 1024 * 1024  # Convert bytes to MB
 
-    def validate_upladed_file(self,file: UploadFile):
+    def validate_uploaded_file(self, file: UploadFile):
 
         if file.content_type not in self.app_settings.FILE_ALLOWED_TYPES:
+            return False, ResponseSignal.FILE_TYPE_NOT_ALLOWED.value
 
-            #raise ValueError(f"File type {file.content_type} is not allowed. Allowed types: {self.app_settings.FILE_ALLOWED_TYPES}")
-            return False,ResponseSignal.FILE_TYPE_NOT_ALLOWED.value
-        if file.size > self.app_settings.FILE_MAX_SIZE_MB * self.size_scale:
+        file_size = file.size
+        if file_size is None:
+            content_length = file.headers.get("content-length")
+            file_size = int(content_length) if content_length else None
 
-            #raise ValueError(f"File size exceeds the maximum allowed size of {self.app_settings.FILE_MAX_SIZE_MB} MB.")
-            return False,ResponseSignal.FILE_SIZE_EXCEEDED.value
+        if file_size is None or file_size > self.app_settings.FILE_MAX_SIZE_MB * self.size_scale:
+            return False, ResponseSignal.FILE_SIZE_EXCEEDED.value
 
-        return True,ResponseSignal.FILE_VALIDATED_SUCCESS.value
+        return True, ResponseSignal.FILE_VALIDATED_SUCCESS.value
     
     def generate_unique_filepath(self, original_filename: str, project_id: str):
         random_key = self.generate_random_string()

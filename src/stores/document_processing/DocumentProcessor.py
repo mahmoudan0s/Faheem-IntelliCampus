@@ -11,7 +11,7 @@ fitz.TOOLS.mupdf_display_warnings(False)
 
 class DocumentProcessor:
 
-    def __init__(self, chunk_size: int = 100, overlap: int = 20, generation_client=None):
+    def __init__(self, chunk_size: int = 700, overlap: int = 100, generation_client=None):
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.generation_client = generation_client

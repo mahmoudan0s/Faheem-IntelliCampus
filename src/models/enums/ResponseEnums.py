@@ -21,3 +21,16 @@ class ResponseSignal(str, Enum):
     VECTORDB_SEARCH_ERROR = "vector_db_search_error"
     RAG_ANSWER_SUCCESS = "rag_answer_success"
     RAG_ANSWER_ERROR = "rag_answer_error"
+
+    CHAT_ATTACHMENT_SUCCESS = "chat_attachment_success"
+    CHAT_ATTACHMENT_ERROR = "chat_attachment_error"
+    CHAT_ATTACHMENT_EXTRACTED = "chat_attachment_extracted"
+
+    COURSE_UPLOAD_SUCCESS = "course_upload_success"
+    COURSE_UPLOAD_ERROR = "course_upload_error"
+    COURSE_NOT_FOUND = "course_not_found"
+    COURSE_SEARCH_SUCCESS = "course_search_success"
+    COURSE_SEARCH_ERROR = "course_search_error"
+    COURSE_ANSWER_SUCCESS = "course_answer_success"
+    COURSE_ANSWER_ERROR = "course_answer_error"
+    PROJECT_COURSE_MISMATCH = "project_course_mismatch"

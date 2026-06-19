@@ -141,6 +141,30 @@ async def search_index(request: Request, project_id: int, search_request: Search
         project_id=project_id
     )
 
+    if search_request.course_id is not None:
+        from models.CourseModel import CourseModel
+        import uuid
+        course_model = await CourseModel.create_instance(
+            db_client=request.app.db_client
+        )
+        course = await course_model.get_course_by_code(code=search_request.course_id)
+        if not course:
+            try:
+                uid = uuid.UUID(search_request.course_id)
+                course = await course_model.get_course_by_id(course_id=uid)
+            except (ValueError, AttributeError):
+                course = None
+        if not course:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"signal": ResponseSignal.COURSE_NOT_FOUND.value}
+            )
+        if project.course_id != course.id:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"signal": ResponseSignal.PROJECT_COURSE_MISMATCH.value}
+            )
+
     nlp_controller = NLPController(
         vectordb_client=request.app.vectordb_client,
         generation_client=request.app.generation_client,
@@ -177,6 +201,30 @@ async def answer_rag(request: Request, project_id: int, search_request: SearchRe
     project = await project_model.get_project_or_create_one(
         project_id=project_id
     )
+
+    if search_request.course_id is not None:
+        from models.CourseModel import CourseModel
+        import uuid
+        course_model = await CourseModel.create_instance(
+            db_client=request.app.db_client
+        )
+        course = await course_model.get_course_by_code(code=search_request.course_id)
+        if not course:
+            try:
+                uid = uuid.UUID(search_request.course_id)
+                course = await course_model.get_course_by_id(course_id=uid)
+            except (ValueError, AttributeError):
+                course = None
+        if not course:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"signal": ResponseSignal.COURSE_NOT_FOUND.value}
+            )
+        if project.course_id != course.id:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"signal": ResponseSignal.PROJECT_COURSE_MISMATCH.value}
+            )
 
     nlp_controller = NLPController(
         vectordb_client=request.app.vectordb_client,

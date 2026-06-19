@@ -1,7 +1,7 @@
-from urllib import request
-from fastapi import FastAPI, APIRouter, Depends, UploadFile, status, Request
+from fastapi import APIRouter, Depends, UploadFile, status, Request, Query
 from fastapi.responses import JSONResponse
 import os
+import uuid
 from helpers.confg import get_settings, Settings
 from controllers import DataController, ProjectController, ProcessController, NLPController
 import aiofiles
@@ -10,10 +10,12 @@ import logging
 import asyncio
 from .schemes.data import ProcessRequest
 from models.ProjectModel import ProjectModel
+from models.CourseModel import CourseModel
 from models.ChunkModel import ChunkModel
 from models.AssetModel import AssetModel
 from models.db_schemes import DataChunk, Asset
 from models.enums.AssetTypeEnum import AssetTypeEnum
+from stores.document_processing import KnowledgeBaseProcessor
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -23,21 +25,52 @@ data_router = APIRouter(
 )
 
 @data_router.post("/upload/{project_id}")
-async def upload_data(request: Request, project_id: int, file: UploadFile,
-                      app_settings: Settings = Depends(get_settings)):
-    
+async def upload_data(
+    request: Request,
+    project_id: int,
+    file: UploadFile,
+    app_settings: Settings = Depends(get_settings),
+    course_id: str = Query(None, description="Course code or UUID for course-based isolation"),
+):
     project_model = await ProjectModel.create_instance(
         db_client=request.app.db_client
     )
 
+    if course_id is not None:
+        course_model = await CourseModel.create_instance(
+            db_client=request.app.db_client
+        )
+        course = await course_model.get_course_by_code(code=course_id)
+        if not course:
+            try:
+                uid = uuid.UUID(course_id)
+                course = await course_model.get_course_by_id(course_id=uid)
+            except (ValueError, AttributeError):
+                course = None
+        if not course:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"signal": ResponseSignal.COURSE_NOT_FOUND.value}
+            )
+        project_course_id = course.id
+    else:
+        project_course_id = None
+
     project = await project_model.get_project_or_create_one(
-        project_id=project_id
+        project_id=project_id,
+        course_id=project_course_id,
     )
+
+    if project_course_id is not None and project.course_id != project_course_id:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"signal": ResponseSignal.PROJECT_COURSE_MISMATCH.value}
+        )
 
     #validate the uploaded file properties
     data_controller = DataController()
 
-    is_valid,result_signal= data_controller.validate_upladed_file(file=file)
+    is_valid,result_signal= data_controller.validate_uploaded_file(file=file)
 
     if not is_valid:
         return JSONResponse(
@@ -73,9 +106,10 @@ async def upload_data(request: Request, project_id: int, file: UploadFile,
     
     asset_resource = Asset(
         asset_project_id=project.project_id,
+        asset_course_id=project_course_id,
         asset_type=AssetTypeEnum.FILE.value,
         asset_name=file_id,
-        asset_size=os.path.getsize(file_path)
+        asset_size=os.path.getsize(file_path),
     )
 
     asset_record = await asset_model.create_asset(asset=asset_resource)
@@ -146,8 +180,9 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
             }
             )
 
-    process_controller = ProcessController(
-        project_id=project_id,
+    kb_processor = KnowledgeBaseProcessor(
+        embedding_client=request.app.embedding_client,
+        vectordb_client=request.app.vectordb_client,
         generation_client=request.app.generation_client,
     )
 
@@ -159,26 +194,41 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
         )
     
     if do_reset == 1:
-        # delete associated vectors collection
         collection_name = nlp_controller.create_collection_name(project_id=project.project_id)
         _ = await request.app.vectordb_client.delete_collection(collection_name=collection_name)
-
-        # delete associated chunks
         _ = await chunk_model.delete_chunks_by_project_id(
             project_id=project.project_id
         )
 
+    base_path = ProjectController().get_project_path(project_id=project_id)
+
     for asset_id, file_id in project_file_ids.items():
+        file_path = os.path.join(base_path, file_id)
+        if not os.path.exists(file_path):
+            logger.error(f"file not found: {file_path}")
+            continue
+
         file_chunks = await asyncio.to_thread(
-            process_controller.process_file,
+            kb_processor.get_chunks,
+            file_path=file_path,
             file_id=file_id,
             chunk_size=chunk_size,
-            overlap=overlap_size
+            overlap=overlap_size,
+            deep_processing=process_request.deep_processing,
+            extract_tables=process_request.extract_tables,
+            extract_images=process_request.extract_images,
+            enable_ocr=process_request.enable_ocr,
         )
 
-        if file_chunks is None or len(file_chunks) == 0:
+        if not file_chunks:
             logger.error(f"error while processing file: {file_id}")
             continue
+
+        asset_record = await asset_model.get_asset_record(
+            asset_project_id=project.project_id,
+            asset_name=file_id,
+        )
+        chunk_course_id = asset_record.asset_course_id if asset_record else None
 
         file_chunks_records = [
             DataChunk(
@@ -187,6 +237,7 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
                 chunk_order=i+1,
                 chunk_project_id=project.project_id,
                 chunk_asset_id=asset_id,
+                chunk_course_id=chunk_course_id,
             )
             for i, chunk in enumerate(file_chunks)
         ]
