@@ -2,6 +2,7 @@ from ..LLMInterface import LLMInterface
 from ..LLMEnums import OpenAIEnums
 from openai import OpenAI
 import logging
+from typing import List, Union
 
 class OpenAIProvider(LLMInterface):
 
@@ -73,10 +74,7 @@ class OpenAIProvider(LLMInterface):
         return response.choices[0].message.content
 
 
-    def embed_text(self, text: str, document_type: str = None): #third party providers may have different embedding models based on the type of the document,
-         #for example, a provider may have a specific embedding model for scientific papers, and another one for general text, so we can use the document_type
-         #to determine which embedding model to use.
-        
+    def embed_text(self, text: Union[str, List[str]], document_type: str = None):
         if not self.client:
             self.logger.error("OpenAI client was not set")
             return None
@@ -85,21 +83,24 @@ class OpenAIProvider(LLMInterface):
             self.logger.error("Embedding model for OpenAI was not set")
             return None
         
+        if isinstance(text, str):
+            text = [text]
+        
         response = self.client.embeddings.create(
             model = self.embedding_model_id,
-            input = text,
+            input = [self.process_text(t) for t in text],
         )
 
         if not response or not response.data or len(response.data) == 0 or not response.data[0].embedding:
             self.logger.error("Error while embedding text with OpenAI")
             return None
 
-        return response.data[0].embedding
+        return [d.embedding for d in response.data]
 
     def construct_prompt(self, prompt: str, role: str):
         return { # role is to help the provider understand the context of the prompt. content is the actual prompt that will be processed by the provider.
             "role": role,
-            "content": self.process_text(prompt)
+            "content": prompt
         }
     
 

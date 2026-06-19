@@ -1,7 +1,12 @@
 import os
 import fitz
+import logging
 from langchain_core.documents import Document
 from .extractors import TextExtractor, OCRExtractor, TableExtractor, DiagramExtractor, ChartExtractor
+
+
+fitz.TOOLS.mupdf_display_errors(False)
+fitz.TOOLS.mupdf_display_warnings(False)
 
 
 class DocumentProcessor:
@@ -32,30 +37,40 @@ class DocumentProcessor:
         return []
 
     def _process_pdf(self, file_path: str, file_id: str) -> list:
+        logger = logging.getLogger(__name__)
         has_selectable_text = self._pdf_has_selectable_text(file_path)
 
         if has_selectable_text:
-            chunks = []
+            try:
+                chunks = []
 
-            text_chunks = self.text_extractor.extract_pdf(file_path, file_id)
-            chunks.extend(text_chunks)
+                text_chunks = self.text_extractor.extract_pdf(file_path, file_id)
+                chunks.extend(text_chunks)
 
-            table_chunks = self.table_extractor.extract(file_path, file_id)
-            chunks.extend(table_chunks)
+                table_chunks = self.table_extractor.extract(file_path, file_id)
+                chunks.extend(table_chunks)
 
-            img_chunks = self._process_pdf_images(file_path, file_id)
-            chunks.extend(img_chunks)
+                img_chunks = self._process_pdf_images(file_path, file_id)
+                chunks.extend(img_chunks)
 
-            for i, chunk in enumerate(chunks):
-                chunk.metadata["chunk_order"] = i
+                for i, chunk in enumerate(chunks):
+                    chunk.metadata["chunk_order"] = i
 
-            return chunks
+                return chunks
+            except Exception:
+                logger.warning("Text extraction failed, falling back to OCR", exc_info=True)
 
-        else:
+        try:
             return self.ocr_extractor.extract_pdf(file_path, file_id)
+        except Exception as e:
+            logger.error(f"OCR extraction also failed for {file_id}: {e}")
+            return []
 
     def _process_image(self, file_path: str, file_id: str) -> list:
-        ocr_text = self.ocr_extractor.extract_image(file_path)
+        try:
+            ocr_text = self.ocr_extractor.extract_image(file_path)
+        except Exception:
+            return []
         if not ocr_text or not ocr_text.strip():
             return []
 
@@ -102,16 +117,26 @@ class DocumentProcessor:
         from PIL import Image
         import io
 
+        logger = logging.getLogger(__name__)
+
         chunks = []
-        doc = fitz.open(file_path)
+        try:
+            doc = fitz.open(file_path)
+        except Exception as e:
+            logger.warning(f"Could not open PDF for image extraction: {e}")
+            return []
 
         for page_num, page in enumerate(doc):
             image_list = page.get_images(full=True)
 
             for img_index, img_info in enumerate(image_list):
                 xref = img_info[0]
-                base_image = doc.extract_image(xref)
-                img_bytes = base_image["image"]
+                try:
+                    base_image = doc.extract_image(xref)
+                    img_bytes = base_image["image"]
+                except Exception:
+                    logger.warning(f"Failed to extract image {xref} on page {page_num + 1}")
+                    continue
 
                 ocr_text = self.ocr_extractor.extract_image_bytes(img_bytes)
                 if not ocr_text or not ocr_text.strip():
