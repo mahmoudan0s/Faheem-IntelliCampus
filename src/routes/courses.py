@@ -1,8 +1,10 @@
 import os
 import logging
+import tempfile
 import aiofiles
 import uuid
-from fastapi import APIRouter, UploadFile, status, Request, Form
+from typing import List
+from fastapi import APIRouter, UploadFile, status, Request, Form, File
 from fastapi.responses import JSONResponse
 from helpers.confg import get_settings
 from controllers import DataController, ProjectController, NLPController
@@ -13,7 +15,7 @@ from models.ChunkModel import ChunkModel
 from models.AssetModel import AssetModel
 from models.db_schemes import DataChunk, Asset, Course
 from models.enums.AssetTypeEnum import AssetTypeEnum
-from stores.document_processing import KnowledgeBaseProcessor
+from stores.document_processing import KnowledgeBaseProcessor, ChatAttachmentProcessor
 from langchain_core.documents import Document
 from routes.schemes.nlp import SearchRequest
 from routes.schemes.courses import CreateCourseRequest, ProcessCourseRequest, IndexCourseRequest
@@ -463,7 +465,9 @@ async def course_search(
 async def course_answer(
     request: Request,
     course_code: str,
-    search_request: SearchRequest,
+    text: str = Form(...),
+    limit: int = Form(5),
+    files: List[UploadFile] = File(None),
 ):
     course_model = await CourseModel.create_instance(
         db_client=request.app.db_client
@@ -490,18 +494,91 @@ async def course_answer(
         template_parser=request.app.template_parser,
     )
 
+    additional_context = []
+    file_sources = []
+
+    CHUNK_SIZE = 800
+    CHUNK_OVERLAP = 100
+    def chunk_text(text, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+        result = []
+        start = 0
+        while start < len(text):
+            end = min(start + size, len(text))
+            result.append(text[start:end])
+            if end == len(text):
+                break
+            start += size - overlap
+        return result
+
+    if files:
+        processor = ChatAttachmentProcessor(
+            embedding_client=request.app.embedding_client,
+            generation_client=request.app.generation_client,
+        )
+        for f in files:
+            if not f.filename:
+                continue
+            tmp_dir = tempfile.mkdtemp()
+            file_path = os.path.join(tmp_dir, f.filename)
+            try:
+                async with aiofiles.open(file_path, 'wb') as out_file:
+                    while chunk := await f.read(512 * 1024):
+                        await out_file.write(chunk)
+                content = processor.process_attachment(
+                    file_path=file_path,
+                    file_id=f.filename,
+                    query=text,
+                )
+                logger.info(f"File {f.filename}: extracted {len(content)} chars, preview={content[:100]!r}")
+                if content:
+                    chunks = chunk_text(content)
+                    additional_context.extend(chunks)
+                    file_sources.append({"file": f.filename, "content_preview": content[:200]})
+            except Exception as e:
+                logger.warning(f"Failed to process uploaded file {f.filename}: {e}")
+            finally:
+                try:
+                    os.remove(file_path)
+                    os.rmdir(tmp_dir)
+                except Exception:
+                    pass
+
     answer, full_prompt, chat_history, retrieved_documents = await nlp_controller.answer_rag_question(
         project=project,
-        query=search_request.text,
-        limit=search_request.limit,
+        query=text,
+        limit=limit,
         course_code=course_code,
+        additional_context=additional_context if additional_context else None,
     )
+
+    logger.info(f"KB results: {len(retrieved_documents) if retrieved_documents else 0}, "
+                f"uploaded contexts: {len(additional_context)}, "
+                f"answer length: {len(answer) if answer else 0}")
 
     if not answer:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"signal": ResponseSignal.COURSE_ANSWER_ERROR.value}
         )
+
+    sources = []
+    if retrieved_documents:
+        sources += [
+            {
+                "content": doc.text,
+                "chunk_type": doc.chunk_type,
+                "page": doc.page,
+                "source_file": doc.source_file,
+                "score": doc.score,
+                "type": "kb",
+            }
+            for doc in retrieved_documents
+        ]
+    if file_sources:
+        sources += [
+            {**fs, "type": "upload"}
+            for fs in file_sources
+        ]
 
     return JSONResponse(
         content={
@@ -510,15 +587,6 @@ async def course_answer(
             "answer": answer,
             "full_prompt": full_prompt,
             "chat_history": chat_history,
-            "sources": [
-                {
-                    "content": doc.text,
-                    "chunk_type": doc.chunk_type,
-                    "page": doc.page,
-                    "source_file": doc.source_file,
-                    "score": doc.score,
-                }
-                for doc in retrieved_documents
-            ] if retrieved_documents else [],
+            "sources": sources,
         }
     )

@@ -95,7 +95,7 @@ class NLPController(BaseController):
 
         return results
     
-    async def answer_rag_question(self, project: Project, query: str, limit: int = 10, course_code: str = None):
+    async def answer_rag_question(self, project: Project, query: str, limit: int = 10, course_code: str = None, additional_context: List[str] = None):
         
         answer, full_prompt, chat_history = None, None, None
 
@@ -107,21 +107,41 @@ class NLPController(BaseController):
             course_code=course_code,
         )
 
-        if not retrieved_documents or len(retrieved_documents) == 0:
+        has_kb = retrieved_documents and len(retrieved_documents) > 0
+        has_files = additional_context and len(additional_context) > 0
+
+        if not has_kb and not has_files:
             return answer, full_prompt, chat_history, []
         
         # step2: Construct LLM prompt
         system_prompt = self.template_parser.get("rag", "system_prompt")
 
-        documents_prompts = "\n".join([
-            self.template_parser.get("rag", "document_prompt", {
-                    "doc_num": idx + 1,
-                    "chunk_text": self.generation_client.process_text(doc.text),
-            })
-            for idx, doc in enumerate(retrieved_documents)
-        ])
+        doc_num = 0
+        parts = []
+
+        if has_kb:
+            kb_prompts = "\n".join([
+                self.template_parser.get("rag", "document_prompt", {
+                        "doc_num": idx + 1,
+                        "chunk_text": self.generation_client.process_text(doc.text),
+                })
+                for idx, doc in enumerate(retrieved_documents)
+            ])
+            parts.append(kb_prompts)
+            doc_num += len(retrieved_documents)
+
+        if has_files:
+            file_prompts = "\n".join([
+                self.template_parser.get("rag", "document_prompt", {
+                        "doc_num": doc_num + idx + 1,
+                        "chunk_text": self.generation_client.process_text(ctx),
+                })
+                for idx, ctx in enumerate(additional_context)
+            ])
+            parts.append(file_prompts)
 
         footer_prompt = self.template_parser.get("rag", "footer_prompt", {"query": query})
+        parts.append(footer_prompt)
 
         # step3: Construct Generation Client Prompts
         chat_history = [
@@ -131,7 +151,7 @@ class NLPController(BaseController):
             )
         ]
 
-        full_prompt = "\n\n".join([ documents_prompts,  footer_prompt])
+        full_prompt = "\n\n".join(parts)
 
         # step4: Retrieve the Answer
         answer = self.generation_client.generate_text(
