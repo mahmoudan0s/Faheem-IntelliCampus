@@ -40,3 +40,4 @@ class RetrievedDocument(BaseModel):
     chunk_type: str = "text"
     page: int | None = None
     source_file: str | None = None
+    metadata: dict | None = None
