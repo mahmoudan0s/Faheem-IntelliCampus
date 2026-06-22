@@ -97,6 +97,9 @@ async def course_upload(
     request: Request,
     course_code: str,
     file: UploadFile,
+    type: str = Form("other"),
+    lecture_id: str = Form(None),
+    lecture_name: str = Form(None),
 ):
     course_model = await CourseModel.create_instance(
         db_client=request.app.db_client
@@ -106,6 +109,18 @@ async def course_upload(
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"signal": ResponseSignal.COURSE_NOT_FOUND.value}
+        )
+
+    if type not in ("lecture", "book", "other"):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"signal": "type must be one of: lecture, book, other"}
+        )
+
+    if type == "lecture" and (not lecture_id or not lecture_name):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"signal": "lecture_id and lecture_name are required when type is lecture"}
         )
 
     project_model = await ProjectModel.create_instance(
@@ -140,6 +155,11 @@ async def course_upload(
             content={"signal": ResponseSignal.FILE_UPLOAD_FAILED.value}
         )
 
+    asset_config = {"type": type}
+    if type == "lecture":
+        asset_config["lecture_id"] = lecture_id
+        asset_config["lecture_name"] = lecture_name
+
     asset_model = await AssetModel.create_instance(
         db_client=request.app.db_client
     )
@@ -149,6 +169,7 @@ async def course_upload(
         asset_type=AssetTypeEnum.FILE.value,
         asset_name=file_id,
         asset_size=os.path.getsize(file_path),
+        asset_config=asset_config,
     )
     asset_record = await asset_model.create_asset(asset=asset_resource)
 
@@ -157,6 +178,9 @@ async def course_upload(
         content={
             "signal": "file_uploaded",
             "file_id": asset_record.asset_id,
+            "file_type": type,
+            "lecture_id": lecture_id,
+            "lecture_name": lecture_name,
             "course_code": course_code,
         }
     )
@@ -272,10 +296,26 @@ async def course_process(
             skipped.append({"file_id": aid, "reason": "processing_failed"})
             continue
 
+        asset_config = asset_record.asset_config or {}
+        asset_type = asset_config.get("type", "other")
+        if asset_type == "lecture":
+            asset_lecture_id = asset_config.get("lecture_id")
+            asset_lecture_name = asset_config.get("lecture_name")
+        else:
+            asset_lecture_id = None
+            asset_lecture_name = None
+
         chunk_records = [
             DataChunk(
                 chunk_text=chunk.page_content,
-                chunk_metadata=chunk.metadata,
+                chunk_metadata={
+                    **chunk.metadata,
+                    "source": asset_record.asset_name,
+                    "asset_id": asset_record.asset_id,
+                    "type": asset_type,
+                    "lecture_id": asset_lecture_id,
+                    "lecture_name": asset_lecture_name,
+                },
                 chunk_order=i + 1,
                 chunk_project_id=project.project_id,
                 chunk_asset_id=asset_record.asset_id,

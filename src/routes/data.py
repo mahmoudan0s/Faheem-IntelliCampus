@@ -230,10 +230,27 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
         )
         chunk_course_id = asset_record.asset_course_id if asset_record else None
 
+        asset_config = asset_record.asset_config or {} if asset_record else {}
+        asset_type = asset_config.get("type", "other")
+        if asset_type == "lecture":
+            asset_lecture_id = asset_config.get("lecture_id")
+            asset_lecture_name = asset_config.get("lecture_name")
+        else:
+            asset_lecture_id = None
+            asset_lecture_name = None
+        asset_name = asset_record.asset_name if asset_record else file_id
+
         file_chunks_records = [
             DataChunk(
                 chunk_text=chunk.page_content,
-                chunk_metadata=chunk.metadata,
+                chunk_metadata={
+                    **chunk.metadata,
+                    "source": asset_name,
+                    "asset_id": asset_id,
+                    "type": asset_type,
+                    "lecture_id": asset_lecture_id,
+                    "lecture_name": asset_lecture_name,
+                },
                 chunk_order=i+1,
                 chunk_project_id=project.project_id,
                 chunk_asset_id=asset_id,
