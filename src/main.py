@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes import base, data, nlp, chat, courses, smart_notes
+from routes import base, data, nlp, chat, courses, smart_notes, admin_bylaw
 from helpers.confg import get_settings
 from stores.llm.LLMProviderFactory import LLMProviderFactory
 from stores.vectordb.VectorDBProviderFactory import VectorDBProviderFactory
@@ -60,3 +60,4 @@ app.include_router(nlp.nlp_router)
 app.include_router(chat.chat_router)
 app.include_router(courses.courses_router)
 app.include_router(smart_notes.smart_notes_router)
+app.include_router(admin_bylaw.admin_bylaw_router)
