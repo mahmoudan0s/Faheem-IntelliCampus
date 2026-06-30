@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     PRIMARY_LANG: str = "en"
     DEFAULT_LANG: str = "en"
 
+    SQL_SERVER_HOST: str = "localhost"
+    SQL_SERVER_PORT: int = 1433
+    SQL_SERVER_USERNAME: str = "sa"
+    SQL_SERVER_PASSWORD: str = "SA123456"
+    SQL_SERVER_DATABASE: str = "IntelliCampusDb"
+    SQL_SERVER_DRIVER: str = "ODBC Driver 18 for SQL Server"
+
     model_config = SettingsConfigDict(env_file=".env")
 
 def get_settings():
