@@ -75,3 +75,9 @@ class HuggingFaceProvider(LLMInterface):
             "role": role,
             "content": self.process_text(prompt)
         }
+
+    def chat_completion(self, messages: list, tools: list = None, tool_choice: str = None,
+                        model: str = None, max_tokens: int = None,
+                        temperature: float = None):
+        self.logger.warning("HuggingFaceProvider does not support tool-calling chat completion")
+        return None
