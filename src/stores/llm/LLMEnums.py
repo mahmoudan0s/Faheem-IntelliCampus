@@ -30,7 +30,6 @@ class HuggingFaceEnums(Enum):
     ASSISTANT = "assistant"
     
 
-
 class DocumentTypeEnum(Enum):
     DOCUMENT = "document"
     QUERY = "query"

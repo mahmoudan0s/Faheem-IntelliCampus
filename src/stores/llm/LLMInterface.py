@@ -22,3 +22,9 @@ class LLMInterface(ABC):
     @abstractmethod
     def construct_prompt(self, prompt: str, role: str): #rephrase the prompt based on the role (system, user, assistant), before generating text. This can be used to add specific instructions or context to the prompt based on the role.
         pass
+
+    @abstractmethod
+    def chat_completion(self, messages: list, tools: list = None, tool_choice: str = None,
+                        model: str = None, max_tokens: int = None,
+                        temperature: float = None):
+        pass

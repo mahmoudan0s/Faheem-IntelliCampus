@@ -79,3 +79,27 @@ class GroqProvider(LLMInterface):
             "role": role,
             "content": prompt
         }
+
+    def chat_completion(self, messages: list, tools: list = None, tool_choice: str = None,
+                        model: str = None, max_tokens: int = None,
+                        temperature: float = None):
+        if not self.client:
+            self.logger.error("Groq client was not set")
+            return None
+
+        model = model or self.generation_model_id
+        if not model:
+            self.logger.error("Generation model for Groq was not set")
+            return None
+
+        max_tokens = max_tokens or self.default_generation_max_output_tokens
+        temperature = temperature or self.default_generation_temperature
+
+        return self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools if tools else None,
+            tool_choice=tool_choice or ("auto" if tools else None),
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
