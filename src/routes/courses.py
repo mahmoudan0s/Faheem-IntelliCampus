@@ -219,13 +219,14 @@ async def course_process(
         db_client=request.app.db_client
     )
 
+    nlp_controller = NLPController(
+        vectordb_client=request.app.vectordb_client,
+        generation_client=getattr(request.app, "groq_generation_client", request.app.generation_client),
+        embedding_client=request.app.embedding_client,
+        template_parser=request.app.template_parser,
+    )
+
     if process_req.do_reset == 1:
-        nlp_controller = NLPController(
-            vectordb_client=request.app.vectordb_client,
-            generation_client=request.app.generation_client,
-            embedding_client=request.app.embedding_client,
-            template_parser=request.app.template_parser,
-        )
         collection_name = nlp_controller.create_collection_name(
             project_id=project.project_id,
             course_code=course_code,

@@ -1,0 +1,47 @@
+[
+  {
+    "question": "Can I register AI424? What are the prerequisites and have I passed them?",
+    "student_code": "2023010001",
+    "department": "artificial_intelligence"
+  },
+  {
+    "question": "What's my current GPA and how does the grading scale work?",
+    "student_code": "2023010001",
+    "department": "artificial_intelligence"
+  },
+  {
+    "question": "How many credit hours have I completed and how many do I need to graduate?",
+    "student_code": "2023010001",
+    "department": "artificial_intelligence"
+  },
+  {
+    "question": "What is my weekly class schedule and what is the minimum attendance percentage?",
+    "student_code": "2023010001"
+  },
+  {
+    "question": "What elective courses are available for the Information Systems department and how many do I need to take?",
+    "department": "information_systems"
+  },
+  {
+    "question": "Show me the study plan for level 3 first semester in Information Systems",
+    "department": "information_systems"
+  },
+  {
+    "question": "What are the contents of the Data Warehousing course and what are its prerequisites?",
+    "department": "information_systems"
+  },
+  {
+    "question": "What's my exam schedule and what happens if I miss a class?",
+    "student_code": "2023010001"
+  },
+  {
+    "question": "What are my completed courses and what compulsory courses remain for my department?",
+    "student_code": "2023010001",
+    "department": "artificial_intelligence"
+  },
+  {
+    "question": "Tell me about the Bachelor's degree requirements in Computing and Artificial Intelligence and check my progress",
+    "student_code": "2023010001",
+    "department": "artificial_intelligence"
+  }
+]

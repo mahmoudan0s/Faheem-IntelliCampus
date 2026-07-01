@@ -64,14 +64,19 @@ class OpenAIProvider(LLMInterface):
             model = self.generation_model_id,
             messages = chat_history,
             max_tokens = max_output_tokens,
-            temperature = temperature
+            temperature = temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
 
         if not response or not response.choices or len(response.choices) == 0 or not response.choices[0].message:
             self.logger.error("Error while generating text with OpenAI")
             return None
 
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        if not content:
+            content = getattr(response.choices[0].message, "reasoning", None)
+
+        return content
 
 
     def embed_text(self, text: Union[str, List[str]], document_type: str = None):
@@ -118,11 +123,21 @@ class OpenAIProvider(LLMInterface):
         max_tokens = max_tokens or self.default_generation_max_output_tokens
         temperature = temperature or self.default_generation_temperature
 
-        return self.client.chat.completions.create(
+        self.logger.info("=== OpenAI API Request ===")
+        self.logger.info("Model: %s", model)
+        self.logger.info("Messages: %d msgs", len(messages))
+        self.logger.info("Tools: %s", [t["function"]["name"] for t in tools] if tools else "NONE")
+        self.logger.info("Tool choice: %s", tool_choice)
+        self.logger.info("Max tokens: %s", max_tokens)
+
+        result = self.client.chat.completions.create(
             model=model,
             messages=messages,
             tools=tools if tools else None,
             tool_choice=tool_choice or ("auto" if tools else None),
             max_tokens=max_tokens,
             temperature=temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
+
+        return result

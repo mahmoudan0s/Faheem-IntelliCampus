@@ -37,6 +37,10 @@ async def startup_span():
     app.generation_client = llm_provider_factory.create(provider=settings.GENERATION_BACKEND)
     app.generation_client.set_generation_model(model_id=settings.GENERATION_MODEL_ID)
 
+    app.groq_generation_client = llm_provider_factory.create(provider="GROQ")
+    if app.groq_generation_client:
+        app.groq_generation_client.set_generation_model(model_id=settings.GROQ_MODEL_ID)
+
     app.embedding_client = llm_provider_factory.create(provider=settings.EMBEDDING_BACKEND)
     app.embedding_client.set_embedding_model(
         model_id=settings.EMBEDDING_MODEL_ID,

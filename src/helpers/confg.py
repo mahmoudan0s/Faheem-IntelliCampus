@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     Generation_Model_ID_Literal : List[str] = None
     GENERATION_MODEL_ID: str = None
+    GROQ_MODEL_ID: str = None
     EMBEDDING_MODEL_ID: str = None
     EMBEDDING_MODEL_SIZE: int = None
     INPUT_DEFAULT_MAX_CHARACTERS: int = None

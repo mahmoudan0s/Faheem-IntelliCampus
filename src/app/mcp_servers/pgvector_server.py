@@ -167,6 +167,9 @@ def _build_result(text: str, score, meta: dict) -> dict:
             "category": meta.get("category"),
             "chunk_type": meta.get("chunk_type"),
             "section": meta.get("section"),
+            "prerequisites": meta.get("prerequisites"),
+            "credit_hours": meta.get("credit_hours"),
+            "requirement_type": meta.get("requirement_type"),
         },
     }
 
@@ -188,7 +191,7 @@ async def search_bylaw_chunks(
     - "course_description" — course contents, topics, learning outcomes
     - "study_plan" — recommended semester-by-semester course plans (use with level + semester)
     - "grading_policy" — grade scale, GPA calculation, pass/fail rules
-    - "graduation_requirement" — total hours, honors, conditions
+    - "graduation_requirements" — total hours, honors, conditions
     - "registration_rules" — course registration, add/drop, credit load
     - "attendance_rules" — attendance policy, absence, incomplete grades
     - "academic_regulation" — study regulations, withdrawal, suspension
@@ -259,6 +262,9 @@ async def search_bylaw_chunks(
             if meta.get("department"): tags.append(f"Dept: {meta['department']}")
             if meta.get("category"): tags.append(f"Category: {meta['category']}")
             if meta.get("chunk_type"): tags.append(f"Type: {meta['chunk_type']}")
+            if meta.get("prerequisites"): tags.append(f"Prereq: {meta['prerequisites']}")
+            if meta.get("credit_hours"): tags.append(f"Credits: {meta['credit_hours']}")
+            if meta.get("requirement_type"): tags.append(f"Req: {meta['requirement_type']}")
             if tags:
                 lines.append(f"[{' | '.join(tags)}]")
             lvl = meta.get("level")
