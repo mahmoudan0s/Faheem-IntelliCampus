@@ -1248,6 +1248,7 @@
     }
   }
 ]
+
 [
   {
     "text": "College Requirements - Basic Computer Science\n\nCourse: Introduction to Database Systems\n\nCourse Code: IS211\nCredit Hours: 3\nPrerequisite: Structured Programming\n\nCourse Contents:\n• Introduction to databases.\n• Purpose and importance of databases.\n• Relational model.\n• Relational algebra.\n• SQL.\n• Entity-Relationship (ER) model.\n• Mapping ER models to relational schemas.",
@@ -1346,7 +1347,6 @@
     }
   }
 ]
-
 
 [
   {
@@ -1462,6 +1462,7 @@
   }
 }
 ]
+
 [
   {
     "text": "Specialization Requirements - Computer Science\n\nCourse: Big Data Analysis\n\nCourse Code: CS434\nCredit Hours: 3\nPrerequisites: Introduction to Database Systems, Machine Learning\n\nCourse Contents:\n• MapReduce.\n• Clustering algorithms for high-dimensional data.\n• Predictive analytics.\n• Dimensionality reduction.\n• Machine learning for analyzing large graph structures.\n• Social network graph analysis.\n• Technologies for extracting important properties from large datasets.",
@@ -1753,8 +1754,6 @@
   }
 ]
 
-
-
 [
   {
     "text": "Specialization Requirements - Information Technology\n\nCourse: Computer Architecture\n\nCourse Code: IT313\nCredit Hours: 3\nPrerequisite: Logic Design\n\nCourse Contents:\n• Modern computer architecture design principles.\n• Performance and cost considerations.\n• Architectural features influenced by high-level languages.\n• Networking and security considerations.\n• Processor implementation strategies.\n• Microprogramming.\n• Pipelining.\n• CISC architecture.\n• RISC architecture.\n• Vector processors.\n• Memory hierarchy.\n• Memory architectures.\n• I/O subsystems.\n• Bus subsystems.\n• Special-purpose architectures.\n• Parallel processing.\n• Distributed systems.",
@@ -1965,6 +1964,7 @@
     }
   }
 ]
+
 [
   {
     "text": "Specialization Requirements - Information Technology\n\nCourse: Machine Vision\n\nCourse Code: IT415\nCredit Hours: 3\nPrerequisites: Image Processing, Computer Graphics\n\nCourse Contents:\n• Fundamentals of image formation.\n• Camera imaging geometry.\n• Feature detection and matching.\n• Multiview geometry, including stereo vision.\n• Motion estimation.\n• Object tracking.\n• Classification techniques.\n• Depth recovery from stereo.\n• Camera calibration.\n• Image stabilization.\n• Automated image alignment (e.g., panoramas).\n• Action recognition.",
@@ -2367,7 +2367,6 @@
   }
 }
 ]
-
 
 [
   {
@@ -2931,8 +2930,6 @@
   }
 }
 ]
-
-
 
 [
   {
@@ -3884,7 +3881,6 @@
 }
 ]
 
-
 [{
   "text": "Field Training\n\nCourse: Field Training\n\nCourse Code: TR301\nCredit Hours: 3\nPrerequisites: Passing 60 Credit Hours\n\nCourse Contents:\n• Mandatory field training before graduation.\n• One month of practical training.\n• Can be completed during any summer vacation after passing 60 credit hours.\n• Focus on gaining practical industry experience.\n• Training on industry-standard hardware, software, methods, and techniques.\n• Students complete training in their chosen area of specialization.\n• Prepares students for professional work and familiarizes them with industry practices.",
   "metadata": {
@@ -3901,9 +3897,6 @@
     "order": 247
   }
 }]
-
-
-
 
 [
 {

@@ -6,6 +6,7 @@ import sys
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Optional
+from urllib.parse import quote_plus
 
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import create_engine, text
@@ -31,7 +32,7 @@ def _get_engine() -> Engine:
     if _engine is None:
         settings = get_settings()
         conn_str = (
-            f"mssql+pyodbc://{settings.SQL_SERVER_USERNAME}:{settings.SQL_SERVER_PASSWORD}"
+            f"mssql+pyodbc://{settings.SQL_SERVER_USERNAME}:{quote_plus(settings.SQL_SERVER_PASSWORD)}"
             f"@{settings.SQL_SERVER_HOST}:{settings.SQL_SERVER_PORT}"
             f"/{settings.SQL_SERVER_DATABASE}"
             f"?driver={settings.SQL_SERVER_DRIVER.replace(' ', '+')}"
@@ -135,6 +136,7 @@ async def get_current_courses(student_code: str) -> str:
         LEFT JOIN Classes cl ON sc.ClassId = cl.ClassId
         LEFT JOIN Users u ON cl.InstructorId = u.UserId
         WHERE sc.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
+            AND sc.Status = 1
         ORDER BY c.CourseCode
     """
     return _execute_query(sql, {"student_code": student_code})
@@ -142,18 +144,57 @@ async def get_current_courses(student_code: str) -> str:
 
 @mcp.tool()
 async def get_transcript(student_code: str) -> str:
-    """Get full academic transcript: all courses with semesters and statuses."""
+    """Get full academic transcript: all courses with semesters, statuses, class work score,
+    total grade percentage, GradeScales from the bylaw, and letter grade derived from GradeScales."""
     sql = """
         SELECT
-            c.CourseCode,
-            c.CourseName,
-            c.CreditHours,
-            sc.Semester,
-            sc.Status
-        FROM StudentCourses sc
-        JOIN Courses c ON c.CourseId = sc.CourseId
-        WHERE sc.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
-        ORDER BY sc.Semester, c.CourseCode
+            subq.CourseCode,
+            subq.CourseName,
+            subq.CreditHours,
+            subq.Semester,
+            subq.Status,
+            subq.ClassWorkScore,
+            ROUND(subq.TotalPercentage, 2) AS TotalPercentage,
+            b.GradeScales,
+            (SELECT TOP 1 gs.LetterGrade
+             FROM OPENJSON(b.GradeScales)
+             WITH (LetterGrade NVARCHAR(5) '$.Letter', MinScore DECIMAL(5,2) '$.MinScore') AS gs
+             WHERE subq.TotalPercentage >= gs.MinScore
+             ORDER BY gs.MinScore DESC
+            ) AS LetterGrade,
+            (SELECT TOP 1 gs.Points
+             FROM OPENJSON(b.GradeScales)
+             WITH (Points DECIMAL(4,2) '$.Points', MinScore DECIMAL(5,2) '$.MinScore') AS gs
+             WHERE subq.TotalPercentage >= gs.MinScore
+             ORDER BY gs.MinScore DESC
+            ) AS GradePoints
+        FROM (
+            SELECT
+                c.CourseCode,
+                c.CourseName,
+                c.CreditHours,
+                sc.Semester,
+                sc.Status,
+                sc.StudentId,
+                (SELECT ISNULL(SUM(g.Score), 0) FROM Grades g
+                 WHERE g.CourseId = sc.CourseId AND g.StudentId = sc.StudentId
+                 AND (g.GradeType LIKE '%ClassWork%' OR g.GradeType LIKE '%Class Work%'
+                      OR g.GradeType LIKE '%Assignment%' OR g.GradeType LIKE '%Homework%'
+                      OR g.GradeType LIKE '%Quiz%' OR g.GradeType LIKE '%Lab%')
+                ) AS ClassWorkScore,
+                (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                             ELSE SUM((g.Score * 1.0 / NULLIF(g.MaxScore, 0)) * g.Weight)
+                        END
+                 FROM Grades g
+                 WHERE g.CourseId = sc.CourseId AND g.StudentId = sc.StudentId
+                ) AS TotalPercentage
+            FROM StudentCourses sc
+            JOIN Courses c ON c.CourseId = sc.CourseId
+            WHERE sc.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
+        ) subq
+        JOIN Students s ON s.UserId = subq.StudentId
+        JOIN Bylaws b ON b.BylawId = s.BylawId
+        ORDER BY subq.Semester, subq.CourseCode
     """
     return _execute_query(sql, {"student_code": student_code})
 
@@ -197,22 +238,28 @@ async def get_student_grades(student_code: str) -> str:
 
 
 @mcp.tool()
-async def get_semester_grades(student_code: str, semester: int) -> str:
-    """Get courses and grades for a specific semester. LLM can calculate semester GPA from this."""
+async def get_semester_grades(student_code: str, semester: str) -> str:
+    """Get courses and grades for a specific semester (e.g. 'Summer 2023', 'Fall 2024').
+    LLM can calculate semester GPA from this."""
     sql = """
         SELECT
             sc.Semester,
             c.CourseCode,
             c.CourseName,
             c.CreditHours,
-            g.Score
+            c.CourseId,
+            g.Score,
+            g.MaxScore,
+            g.Weight,
+            g.Title,
+            g.GradeType
         FROM StudentCourses sc
         JOIN Courses c ON sc.CourseId = c.CourseId
         LEFT JOIN Grades g ON sc.StudentId = g.StudentId AND sc.CourseId = g.CourseId
         WHERE sc.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
         AND sc.Semester = :semester
     """
-    return _execute_query(sql, {"student_code": student_code, "semester": str(semester)})
+    return _execute_query(sql, {"student_code": student_code, "semester": semester})
 
 
 @mcp.tool()
@@ -246,6 +293,38 @@ async def get_finished_prerequisites(student_code: str) -> str:
 
 
 @mcp.tool()
+async def get_course_prerequisites(
+    course_code: Optional[str] = None,
+    course_name: Optional[str] = None,
+) -> str:
+    """Get prerequisites for a specific course. Provide course_code (e.g. 'CS213') or course_name (e.g. 'Object Oriented Programming'). At least one is required."""
+    search_term = (course_code or course_name or "").strip()
+    if not search_term:
+        return json.dumps({"success": False, "error": "Provide course_code or course_name"})
+    sql = """
+        SELECT
+            c.CourseCode,
+            c.CourseName,
+            pc.CourseCode AS PrerequisiteCode,
+            pc.CourseName AS PrerequisiteName
+        FROM BylawCoursePrerequisites bcp
+        JOIN BylawCourses bc ON bcp.BylawCourseId = bc.BylawCourseId
+        JOIN Courses c ON bc.CourseId = c.CourseId
+        JOIN BylawCourses pbc ON bcp.PrerequisiteBylawCourseId = pbc.BylawCourseId
+        JOIN Courses pc ON pbc.CourseId = pc.CourseId
+        WHERE bc.BylawCourseId IN (
+            SELECT bc2.BylawCourseId
+            FROM BylawCourses bc2
+            JOIN Courses c2 ON bc2.CourseId = c2.CourseId
+            WHERE c2.CourseCode = :search_term
+               OR c2.CourseName LIKE '%' + :search_term + '%'
+        )
+        ORDER BY pc.CourseCode
+    """
+    return _execute_query(sql, {"search_term": search_term})
+
+
+@mcp.tool()
 async def get_weekly_schedule(student_code: str) -> str:
     """Get weekly class schedule with days, times, rooms, and instructors."""
     sql = """
@@ -262,6 +341,7 @@ async def get_weekly_schedule(student_code: str) -> str:
         JOIN Courses c ON sc.CourseId = c.CourseId
         LEFT JOIN Users u ON cl.InstructorId = u.UserId
         WHERE sc.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
+            AND sc.Status = 1
         ORDER BY cl.Day, cl.StartTime
     """
     return _execute_query(sql, {"student_code": student_code})
@@ -309,15 +389,17 @@ async def get_exam_schedule(student_code: str) -> str:
     """Get exam schedule with dates, times, and locations."""
     sql = """
         SELECT
-            c.CourseCode,
-            c.CourseName,
+            es.CourseCode,
+            es.CourseName,
             es.Date,
             es.StartTime,
             es.EndTime,
             es.Location
         FROM ExamSchedules es
-        JOIN Courses c ON es.CourseId = c.CourseId
+        JOIN StudentCourses sc ON sc.StudentId = es.StudentId
+        JOIN Courses c ON c.CourseId = sc.CourseId AND c.CourseCode = es.CourseCode
         WHERE es.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
+            AND sc.Status = 1
         ORDER BY es.Date
     """
     return _execute_query(sql, {"student_code": student_code})
@@ -444,9 +526,9 @@ async def get_student_reminders(student_code: str) -> str:
     """Get the student's reminders and upcoming events."""
     sql = """
         SELECT *
-        FROM Reminders
-        WHERE StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
-        ORDER BY Date
+        FROM [dbo].[Reminders]
+        WHERE StudentId = (SELECT UserId FROM [dbo].[Students] WHERE StudentCode = :student_code)
+        ORDER BY [Date]
     """
     return _execute_query(sql, {"student_code": student_code})
 

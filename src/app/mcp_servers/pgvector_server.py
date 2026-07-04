@@ -57,6 +57,8 @@ async def _keyword_search(
     query: str, top_k: int,
     department: Optional[str], course_code: Optional[str],
     chunk_type: Optional[str], level: Optional[int], semester: Optional[int],
+    category: Optional[str] = None, section: Optional[str] = None,
+    requirement_type: Optional[str] = None,
 ) -> list:
     global _db_session_factory
     if not _db_session_factory:
@@ -79,7 +81,7 @@ async def _keyword_search(
             out = []
             for row in rows:
                 meta = row.metadata or {}
-                if not _match_filters(meta, department, course_code, chunk_type, level, semester):
+                if not _match_filters(meta, department, course_code, chunk_type, level, semester, category, section, requirement_type):
                     continue
                 out.append(_build_result(row.text, row.rank, meta))
                 if len(out) >= top_k:
@@ -94,6 +96,8 @@ async def _metadata_search(
     query: str, top_k: int,
     department: Optional[str], course_code: Optional[str],
     chunk_type: Optional[str], level: Optional[int], semester: Optional[int],
+    category: Optional[str] = None, section: Optional[str] = None,
+    requirement_type: Optional[str] = None,
 ) -> list:
     global _db_session_factory
     if not _db_session_factory:
@@ -114,7 +118,7 @@ async def _metadata_search(
             out = []
             for row in rows:
                 meta = row.metadata or {}
-                if not _match_filters(meta, department, course_code, chunk_type, level, semester):
+                if not _match_filters(meta, department, course_code, chunk_type, level, semester, category, section, requirement_type):
                     continue
                 out.append(_build_result(row.text, 0.5, meta))
                 if len(out) >= top_k:
@@ -129,6 +133,8 @@ def _match_filters(
     meta: dict,
     department: Optional[str], course_code: Optional[str],
     chunk_type: Optional[str], level: Optional[int], semester: Optional[int],
+    category: Optional[str] = None, section: Optional[str] = None,
+    requirement_type: Optional[str] = None,
 ) -> bool:
     if department:
         dept_val = str(meta.get("department") or "").lower().replace("_", "").replace("-", "")
@@ -139,15 +145,19 @@ def _match_filters(
         return False
     if chunk_type and str(meta.get("chunk_type", "")).lower() != chunk_type.lower():
         return False
+    if category and str(meta.get("category", "")).lower() != category.lower():
+        return False
+    if section and str(meta.get("section", "")).lower() != section.lower():
+        return False
+    if requirement_type and str(meta.get("requirement_type", "")).lower() != requirement_type.lower():
+        return False
     if level is not None and meta.get("level") != level:
         return False
     if semester is not None:
         sem_val = meta.get("semester")
         if sem_val is None:
             return False
-        # Support both relative (1-2) and absolute (1-8) semester values
         expected_abs = str(semester)
-        # If level is also given, try absolute mapping: (level-1)*2 + semester
         if level is not None and semester in (1, 2):
             expected_abs = str((level - 1) * 2 + semester)
         if str(sem_val) != expected_abs and str(sem_val) != str(semester):
@@ -183,22 +193,72 @@ async def search_bylaw_chunks(
     chunk_type: Optional[str] = None,
     level: Optional[int] = None,
     semester: Optional[int] = None,
+    category: Optional[str] = None,
+    section: Optional[str] = None,
+    requirement_type: Optional[str] = None,
 ) -> str:
     """Search academic regulations, course information, study plans, and policies.
     Returns the most relevant bylaw excerpts with metadata tags.
 
-    Use chunk_type to narrow results to a specific category:
-    - "course_description" — course contents, topics, learning outcomes
-    - "study_plan" — recommended semester-by-semester course plans (use with level + semester)
-    - "grading_policy" — grade scale, GPA calculation, pass/fail rules
-    - "graduation_requirements" — total hours, honors, conditions
-    - "registration_rules" — course registration, add/drop, credit load
-    - "attendance_rules" — attendance policy, absence, incomplete grades
-    - "academic_regulation" — study regulations, withdrawal, suspension
-    - "program_structure" — specialization breakdown, credit distribution
-    - "course_group" — lists of courses in a category (compulsory/elective)
-    - "graduation_project" — project rules and prerequisites
-    - "field_training" — internship requirements
+    ---
+    chunk_type — narrow by semantic type:
+    - "document_info" — document title, version, issuing authority
+    - "vision" — faculty vision statement
+    - "mission" — faculty mission statement
+    - "values" — faculty values and guiding principles
+    - "objectives" — faculty objectives and goals
+    - "departments" — list of academic departments
+    - "department_overview" — overview of a department, purpose, and scientific fields
+    - "programs" — academic programs offered
+    - "program_framework" — general framework governing programs
+    - "program_overview" — overview of a specific program
+    - "program_structure" — program structure with credit-hour distribution
+    - "study_plan" — recommended semester-by-semester study plan (use with level+semester+department)
+    - "curriculum_section" — a section of the curriculum
+    - "course_group" — lists of courses (compulsory, elective, university requirements)
+    - "course_description" — detailed course info: description, objectives, prerequisites, topics
+    - "academic_requirement" — compulsory or elective requirements
+    - "graduation_requirement" — graduation conditions and requirements
+    - "graduation_project" — graduation project rules
+    - "academic_regulation" — general academic regulations
+    - "registration_rules" — course registration, credit hours, add/drop, prerequisites
+    - "withdrawal_rules" — course withdrawal rules
+    - "attendance_rules" — attendance policies and absence limits
+    - "dismissal_rules" — academic dismissal and suspension
+    - "grading_policy" — GPA calculation, grading system, honors
+    - "academic_progression" — academic standing, progression, warnings
+    - "academic_advising" — advising rules and responsibilities
+    - "course_code_system" — how course codes are constructed
+    - "department_codes" — department abbreviation mappings
+
+    ---
+    category — high-level knowledge category:
+    - "general_requirements" — university-wide requirements
+    - "college_requirements" — faculty-level requirements
+    - "course_contents" — detailed course info (descriptions, objectives, topics, prerequisites)
+    - "specialization_requirements" — department-specific curriculum
+    - "graduation_requirements" — graduation conditions
+    - "study_plan" — recommended semester-by-semester plan
+
+    ---
+    requirement_type — curriculum requirement category:
+    - "compulsory" — mandatory course
+    - "elective" — optional course
+    - "general_elective" — university general elective
+    - "college_compulsory" — faculty compulsory
+    - "department_compulsory" / "specialization_compulsory" — department compulsory (semantically identical, search both)
+    - "department_elective" / "specialization_elective" — department elective (semantically identical, search both)
+    - "graduation_project" — graduation project requirement
+    - "field_training" — internship requirement
+    - "recommended_study_plan" — recommended semester sequence
+
+    ---
+    section — exact document section heading:
+    - "Document Information", "Faculty Vision", "Faculty Mission", etc.
+    - "Article 1 - Study Regulations", "Article 4 - Prerequisites", "Article 10 - GPA Calculation"
+    - "Computer Science - Compulsory Courses", "Information Systems - Elective Courses"
+    - "Sample Study Plan - Level One", "AI Department - Level Three"
+    See full doc for all ~50 section values.
 
     For study plans, use level (1-4) and semester (1-2 or "summer") with department.
 
@@ -207,9 +267,12 @@ async def search_bylaw_chunks(
         top_k: Number of results to return (default 5)
         department: Filter by department (e.g. "computer_science", "information_systems", "AI")
         course_code: Filter by exact course code (e.g. "IS313", "CS462")
-        chunk_type: Filter by chunk type (see list above)
+        chunk_type: Filter by semantic chunk type (see list above)
         level: Filter by academic level (1-4) — for study plans
         semester: Filter by semester (1 or 2) — for study plans
+        category: Filter by high-level knowledge category (see list above)
+        section: Filter by exact document section heading (see full documentation)
+        requirement_type: Filter by curriculum requirement category (see list above)
     """
     global _vectordb_client
     if _embedding_client is None or _vectordb_client is None:
@@ -231,7 +294,7 @@ async def search_bylaw_chunks(
                     if doc.score < -999:
                         continue
                     meta = doc.metadata or {}
-                    if not _match_filters(meta, department, course_code, chunk_type, level, semester):
+                    if not _match_filters(meta, department, course_code, chunk_type, level, semester, category, section, requirement_type):
                         continue
                     results.append(_build_result(doc.text, doc.score, meta))
                     if len(results) >= top_k:
@@ -239,13 +302,13 @@ async def search_bylaw_chunks(
 
         # --- Tier 2: Keyword search (full-text search on text column) ---
         if not results:
-            kw_results = await _keyword_search(query, top_k, department, course_code, chunk_type, level, semester)
+            kw_results = await _keyword_search(query, top_k, department, course_code, chunk_type, level, semester, category, section, requirement_type)
             if kw_results:
                 results = kw_results
 
         # --- Tier 3: Metadata + ILIKE search (catch-all for entity names, codes) ---
         if not results:
-            meta_results = await _metadata_search(query, top_k, department, course_code, chunk_type, level, semester)
+            meta_results = await _metadata_search(query, top_k, department, course_code, chunk_type, level, semester, category, section, requirement_type)
             if meta_results:
                 results = meta_results
 

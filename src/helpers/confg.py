@@ -1,5 +1,5 @@
+from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
 
 class Settings(BaseSettings):
     APP_NAME: str
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = None
     HUGGINGFACE_API_KEY: str = None
 
-    Generation_Model_ID_Literal : List[str] = None
+    Generation_Model_ID_Literal : Optional[List[str]] = None
     GENERATION_MODEL_ID: str = None
     GROQ_MODEL_ID: str = None
     EMBEDDING_MODEL_ID: str = None
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     GENERATION_DEFAULT_MAX_TOKENS: int = None
     GENERATION_DEFAULT_TEMPERATURE: float = None
 
-    VECTOR_DB_BACKEND_LITERAL: List[str] = None
+    VECTOR_DB_BACKEND_LITERAL: Optional[List[str]] = None
     VECTOR_DB_BACKEND : str
     VECTOR_DB_PATH : str
     VECTOR_DB_DISTANCE_METHOD: str = None

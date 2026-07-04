@@ -1,8 +1,7 @@
 from .BaseController import BaseController
-from models.db_schemes import Project, DataChunk
+from models.db_schemes import Project
 from stores.llm.LLMEnums import DocumentTypeEnum
 from typing import List
-import json
 
 class NLPController(BaseController):
 
@@ -19,50 +18,6 @@ class NLPController(BaseController):
         if course_code:
             return f"kb_{course_code}".lower().strip()
         return f"collection_{self.vectordb_client.default_vector_size}_{project_id}".strip()
-    
-    async def reset_vector_db_collection(self, project: Project, course_code: str = None):
-        collection_name = self.create_collection_name(project_id=project.project_id, course_code=course_code)
-        return await self.vectordb_client.delete_collection(collection_name=collection_name)
-    
-    async def get_vector_db_collection_info(self, project: Project, course_code: str = None):
-        collection_name = self.create_collection_name(project_id=project.project_id, course_code=course_code)
-        collection_info = await self.vectordb_client.get_collection_info(collection_name=collection_name)
-
-        return json.loads(
-            json.dumps(collection_info, default=lambda x: x.__dict__)
-        )
-    
-    async def index_into_vector_db(self, project: Project, chunks: List[DataChunk],
-                                   chunks_ids: List[int], 
-                                   do_reset: bool = False,
-                                   course_code: str = None):
-        
-        # step1: get collection name
-        collection_name = self.create_collection_name(project_id=project.project_id, course_code=course_code)
-
-        # step2: manage items
-        texts = [ c.chunk_text for c in chunks ]
-        metadata = [ c.chunk_metadata for c in  chunks]
-        vectors = self.embedding_client.embed_text(text=texts, 
-                                                  document_type=DocumentTypeEnum.DOCUMENT.value)
-
-        # step3: create collection if not exists
-        _ = await self.vectordb_client.create_collection(
-            collection_name=collection_name,
-            embedding_size=self.embedding_client.embedding_size,
-            do_reset=do_reset,
-        )
-
-        # step4: insert into vector db
-        _ = await self.vectordb_client.insert_many(
-            collection_name=collection_name,
-            texts=texts,
-            metadata=metadata,
-            vectors=vectors,
-            record_ids=chunks_ids,
-        )
-
-        return True
     
     async def search_vector_db_collection(self, project: Project, text: str, limit: int = 10, course_code: str = None):
 
