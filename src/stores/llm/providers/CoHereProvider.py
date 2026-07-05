@@ -99,3 +99,9 @@ class CoHereProvider(LLMInterface):
             "role": role,
             "text": prompt
         }
+
+    def chat_completion(self, messages: list, tools: list = None, tool_choice: str = None,
+                        model: str = None, max_tokens: int = None,
+                        temperature: float = None):
+        self.logger.warning("CoHereProvider does not support tool-calling chat completion")
+        return None

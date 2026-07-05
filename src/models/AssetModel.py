@@ -20,8 +20,8 @@ class AssetModel(BaseDataModel):
         async with self.db_client() as session:
             async with session.begin():
                 session.add(asset)
-            await session.commit()
-            await session.refresh(asset)
+                await session.flush()
+                await session.refresh(asset)
         return asset
 
     async def get_all_project_assets(self, asset_project_id: str, asset_type: str):
@@ -42,6 +42,14 @@ class AssetModel(BaseDataModel):
                 Asset.asset_project_id == asset_project_id,
                 Asset.asset_name == asset_name
             )
+            result = await session.execute(stmt)
+            record = result.scalar_one_or_none()
+        return record
+
+    async def get_asset_by_id(self, asset_id: int):
+
+        async with self.db_client() as session:
+            stmt = select(Asset).where(Asset.asset_id == asset_id)
             result = await session.execute(stmt)
             record = result.scalar_one_or_none()
         return record

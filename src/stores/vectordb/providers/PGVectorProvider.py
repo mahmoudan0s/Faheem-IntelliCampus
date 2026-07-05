@@ -10,7 +10,7 @@ import json
 class PGVectorProvider(VectorDBInterface):
 
     def __init__(self, db_client, default_vector_size: int = 786,
-                       distance_method: str = None, index_threshold: int=500):
+                       distance_method: str = None, index_threshold: int=50):
         
         self.db_client = db_client
         self.default_vector_size = default_vector_size
@@ -278,7 +278,9 @@ class PGVectorProvider(VectorDBInterface):
         vector = "[" + ",".join([ str(v) for v in vector ]) + "]"
         async with self.db_client() as session:
             async with session.begin():
-                search_sql = sql_text(f'SELECT {PgVectorTableSchemeEnums.TEXT.value} as text, 1 - ({PgVectorTableSchemeEnums.VECTOR.value} <=> :vector) as score'
+                search_sql = sql_text(f'SELECT {PgVectorTableSchemeEnums.TEXT.value} as text, '
+                                      f'{PgVectorTableSchemeEnums.METADATA.value} as chunk_metadata, '
+                                      f'1 - ({PgVectorTableSchemeEnums.VECTOR.value} <=> :vector) as score'
                                       f' FROM {collection_name}'
                                       ' ORDER BY score DESC '
                                       f'LIMIT {limit}'
@@ -291,7 +293,8 @@ class PGVectorProvider(VectorDBInterface):
                 return [
                     RetrievedDocument(
                         text=record.text,
-                        score=record.score
+                        score=record.score,
+                        metadata=record.chunk_metadata,
                     )
                     for record in records
                 ]

@@ -8,7 +8,7 @@ from models.db_schemes import RetrievedDocument
 class QdrantDBProvider(VectorDBInterface):
 
     def __init__(self, db_client: str, default_vector_size: int = 786,
-                                     distance_method: str = None, index_threshold: int=500):
+                                     distance_method: str = None, index_threshold: int=50):
 
         self.client = None
         self.db_client = db_client
@@ -146,6 +146,7 @@ class QdrantDBProvider(VectorDBInterface):
             RetrievedDocument(**{
                 "score": result.score,
                 "text": result.payload["text"],
+                "metadata": result.payload.get("metadata"),
             })
             for result in results
         ]
