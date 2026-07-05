@@ -46,34 +46,39 @@ USER_PROMPT_TEMPLATE = (
 
 
 def _build_sources_section(documents: list) -> str:
-    seen = set()
-    sources = []
+    pages_by_label = {}
     for doc in documents:
         meta = doc.metadata or {}
-        source_file = meta.get("source_file") or meta.get("source")
+        label = meta.get("lecture_name")
+        if not label:
+            continue
         page = meta.get("page")
-        if not source_file:
-            continue
-        key = (source_file, page)
-        if key in seen:
-            continue
-        seen.add(key)
+        if label not in pages_by_label:
+            pages_by_label[label] = set()
         if page is not None:
-            sources.append(f"- {source_file} (Page {page})")
-        else:
-            sources.append(f"- {source_file}")
-    if not sources:
+            pages_by_label[label].add(page)
+    if not pages_by_label:
         return ""
-    return "\n".join(["## Sources", ""] + sources + [""])
+    lines = ["## Sources", ""]
+    for label in sorted(pages_by_label):
+        pages = sorted(pages_by_label[label])
+        parts = [f"- {label}"]
+        if pages:
+            page_str = ", ".join(str(p) for p in pages)
+            parts.append(f"(Pages {page_str})")
+        lines.append(" ".join(parts))
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _filter_by_lecture(retrieved_documents: list, lecture_id: str = None) -> list:
     if not lecture_id:
         return list(retrieved_documents)
-    return [
+    filtered = [
         doc for doc in retrieved_documents
         if (doc.metadata or {}).get("lecture_id") == lecture_id
     ]
+    return filtered if filtered else list(retrieved_documents)
 
 
 def _build_context(documents: list) -> str:

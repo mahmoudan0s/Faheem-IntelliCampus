@@ -38,10 +38,12 @@ CRITICAL RULES:
    - "Can I register for X?" → pgvector (course info) + sqlserver (prerequisites + completed courses + department)
    - "What should I take next semester?" → pgvector (study plan + compulsory courses) + sqlserver (completed courses + GPA + hours + electives)
    - "Am I on track to graduate?" → pgvector (graduation requirements) + sqlserver (completed hours + transcript)
+   - "What is my GPA?" / "Calculate my GPA" → sqlserver (semester grades). No pgvector needed — the grade scale is built-in.
 
-5. Your FIRST response MUST be tool call(s). No text before tools.
-6. After results, answer immediately. Don't call extra tools unnecessarily.
-7. Never describe your tool-calling process — just call silently."""
+5. Your very first message in the conversation MUST be tool call(s). No text before tools on the first round.
+6. After you receive tool results in subsequent rounds, answer directly. Do NOT call more tools unless the data is clearly incomplete.
+7. Never describe your tool-calling process — just call silently.
+8. Your name is Faheem. You are the Student Academic Advisor. When a student asks about your identity, introduce yourself naturally in the Answer section. Do NOT confuse the student's profile data with your own identity."""
 
 TOOL_RANKER_SYSTEM_PROMPT = """You are a tool selector. Given a student's question and the available tools, select the 1-5 most relevant tools needed to answer the question.
 
@@ -252,7 +254,7 @@ class AdvisorService:
         if student_code:
             profile_text = await self._search_student("get_student_profile", {"student_code": student_code})
             if profile_text:
-                user_content = f"Student profile:\n{profile_text}\n\nStudent question: {question}"
+                user_content = f"The student's profile:\n{profile_text}\n\nStudent question: {question}"
             user_content += f"\n\nMy student code is: {student_code}"
         if department:
             user_content += f"\n\nMy department is: {department}"
@@ -273,110 +275,149 @@ class AdvisorService:
             {"role": "user", "content": user_content},
         ]
 
-        # --- LLM conversation loop with tool calling ---
-        max_rounds = 4
-        round_messages = messages[:]
+        # --- Phase 1: Select and execute tools (single LLM call + tool execution) ---
+        tool_results_text = None
 
         for attempt in range(2):
-            msg = None
-
-            for _round in range(max_rounds):
-                try:
-                    tc = "auto" if selected_tools else None
-                    loop = asyncio.get_running_loop()
-                    response = await asyncio.wait_for(
-                        loop.run_in_executor(
-                            None,
-                            lambda: self._llm_service.chat_completion(
-                                messages=round_messages,
-                                tools=selected_tools if selected_tools else None,
-                                tool_choice=tc,
-                                max_tokens=1024,
-                                temperature=0,
-                            ),
+            try:
+                tc = "auto" if selected_tools else None
+                loop = asyncio.get_running_loop()
+                response = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: self._llm_service.chat_completion(
+                            messages=messages,
+                            tools=selected_tools if selected_tools else None,
+                            tool_choice=tc,
+                            max_tokens=2048,
+                            temperature=0,
                         ),
-                        timeout=current_timeout,
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning("LLM timed out after %ds (round %d, attempt %d)", current_timeout, _round, attempt + 1)
-                    break
-                except Exception as e:
-                    logger.error("LLM API call failed (round %d, attempt %d): %s", _round, attempt + 1, e)
-                    break
+                    ),
+                    timeout=current_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("LLM timed out after %ds (attempt %d)", current_timeout, attempt + 1)
+                continue
+            except Exception as e:
+                logger.error("LLM API call failed (attempt %d): %s", attempt + 1, e)
+                continue
 
-                if not response or not response.choices:
-                    logger.error("LLM returned empty response (round %d, attempt %d)", _round, attempt + 1)
-                    break
+            if not response or not response.choices:
+                continue
 
-                msg = response.choices[0].message
+            msg = response.choices[0].message
 
-                if not msg.tool_calls:
-                    logger.info("LLM stopped at round %d — content=%r, tool_calls=%s",
-                                _round, msg.content, msg.tool_calls)
-                    if msg.content:
-                        return msg.content
-                    break
-
-                logger.info("Round %d, attempt %d — tool_choice=%s, msg.tool_calls=%d",
-                            _round, attempt + 1, tc, len(msg.tool_calls))
-                logger.info("Round %d, attempt %d — tool call names: %s",
-                            _round, attempt + 1, [c.function.name for c in msg.tool_calls])
-
-                round_messages.append({
-                    "role": "assistant",
-                    "content": msg.content or "",
-                    "tool_calls": [
-                        {"id": c.id, "type": "function",
-                         "function": {"name": c.function.name, "arguments": c.function.arguments}}
-                        for c in msg.tool_calls
-                    ],
-                })
-
-                for tc_call in msg.tool_calls:
-                    server_name, tool_name = self._mcp_manager.parse_tool_name(tc_call.function.name)
-                    try:
-                        args = json.loads(tc_call.function.arguments) if tc_call.function.arguments else {}
-                        result = await self._mcp_manager.call_tool(server_name, tool_name, args)
-
-                        content_parts = []
-                        for item in result.content:
-                            if hasattr(item, "text"):
-                                content_parts.append(item.text)
-                            else:
-                                content_parts.append(str(item))
-                        result_text = "\n".join(content_parts) if content_parts else "No data returned."
-
-                        logger.info("Tool %s called with args=%s, isError=%s, response_len=%d",
-                                    tc_call.function.name, args, result.isError, len(result_text))
-                        logger.info("RAW tool result (first 500): %s", result_text[:500])
-
-                        if server_name == "sqlserver":
-                            try:
-                                parsed = json.loads(result_text)
-                                if isinstance(parsed, dict) and parsed.get("success") is False:
-                                    err_msg = parsed.get("error", "Unknown error")
-                                    result_text = f"Error: {err_msg}"
-                            except (json.JSONDecodeError, TypeError):
-                                pass
-
-                        if result.isError:
-                            result_text = f"Error: {result_text}"
-
-                    except Exception as e:
-                        logger.error("Tool call failed %s: %s", tc_call.function.name, e)
-                        result_text = f"Error executing {tc_call.function.name}: {str(e)}"
-
-                    round_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc_call.id,
-                        "content": result_text,
-                    })
-            else:
-                # All rounds completed without a final text answer
-                if msg and msg.content:
+            if not msg.tool_calls:
+                if msg.content:
+                    logger.info("LLM answered directly (attempt %d): %s", attempt + 1, msg.content[:100])
                     return msg.content
+                continue
 
-        # --- Fallback if LLM failed (timeout / error / max rounds) ---
+            logger.info("Attempt %d — tool calls: %s", attempt + 1,
+                        [c.function.name for c in msg.tool_calls])
+
+            # Execute all tool calls
+            result_parts = []
+            for tc_call in msg.tool_calls:
+                server_name, tool_name = self._mcp_manager.parse_tool_name(tc_call.function.name)
+                try:
+                    args = json.loads(tc_call.function.arguments) if tc_call.function.arguments else {}
+                    result = await self._mcp_manager.call_tool(server_name, tool_name, args)
+
+                    content_parts = []
+                    for item in result.content:
+                        if hasattr(item, "text"):
+                            content_parts.append(item.text)
+                        else:
+                            content_parts.append(str(item))
+                    result_text = "\n".join(content_parts) if content_parts else "No data returned."
+
+                    logger.info("Tool %s called with args=%s, isError=%s, response_len=%d",
+                                tc_call.function.name, args, result.isError, len(result_text))
+                    logger.info("RAW tool result (first 500): %s", result_text[:500])
+
+                    if server_name == "sqlserver":
+                        try:
+                            parsed = json.loads(result_text)
+                            if isinstance(parsed, dict) and parsed.get("success") is False:
+                                err_msg = parsed.get("error", "Unknown error")
+                                result_text = f"Error: {err_msg}"
+                            elif isinstance(parsed, dict) and parsed.get("success") is True:
+                                rows = parsed.get("rows", [])
+                                if rows:
+                                    lines = [f"Results ({len(rows)} rows):"]
+                                    for i, row in enumerate(rows, 1):
+                                        vals = [f"{k}: {v}" for k, v in row.items() if v is not None]
+                                        lines.append(f"  {i}. {' | '.join(vals)}")
+                                    result_text = "\n".join(lines)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
+                    if result.isError:
+                        result_text = f"Error: {result_text}"
+
+                except Exception as e:
+                    logger.error("Tool call failed %s: %s", tc_call.function.name, e)
+                    result_text = f"Error executing {tc_call.function.name}: {str(e)}"
+
+                result_parts.append(f"Tool: {tc_call.function.name}\nArguments: {args}\nResult:\n{result_text}")
+
+            tool_results_text = "\n\n---\n\n".join(result_parts)
+            break  # Successful tool execution — exit attempt loop
+
+        # --- Phase 2: Answer from tool results (fresh LLM call, no tools) ---
+        if tool_results_text:
+            answer_messages = [
+                {"role": "system", "content": "You are Faheem, the Student Academic Advisor. Answer the student's question based ONLY on the data provided.\n\n"
+                    "Use this format:\n## Answer\nDirect answer to the student's question.\n\n## Recommendation\nWhat the student should do next.\n\n"
+                    "Rules:\n"
+                    "- Answer ONLY from the provided data. Never use general knowledge.\n"
+                    "- Never mention tool names, tool calls, or internal reasoning.\n"
+                    "- When listing grades, show all courses with their scores and final percentages.\n"
+                    "- If the data is insufficient, say what's missing.\n\n"
+                    "GPA Calculation (built-in — use this directly):\n"
+                    "- Formula: GPA = Total Grade Points / Total Registered Credit Hours\n"
+                    "- For each course: Total Percentage = sum of (Score / MaxScore * Weight) for all grade components\n"
+                    "- Grade Scale:\n"
+                    "  A+ : 90% or above → 4.0 points\n"
+                    "  A  : 85% to <90% → 3.7 points\n"
+                    "  B+ : 80% to <85% → 3.3 points\n"
+                    "  B  : 75% to <80% → 3.0 points\n"
+                    "  C+ : 70% to <75% → 2.7 points\n"
+                    "  C  : 65% to <70% → 2.4 points\n"
+                    "  D+ : 60% to <65% → 2.2 points\n"
+                    "  D  : 50% to <60% → 2.0 points\n"
+                    "  F  : Less than 50% → 0.0 points\n"
+                    "- Calculate GPA: For each course, convert total percentage to grade points using the scale, then GPA = sum(grade_points * credit_hours) / sum(credit_hours)"},
+                {"role": "user", "content": f"{user_content}\n\n---\n\nData retrieved:\n{tool_results_text}\n\nAnswer the student's question based on this data."},
+            ]
+            try:
+                loop = asyncio.get_running_loop()
+                response = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: self._llm_service.chat_completion(
+                            messages=answer_messages,
+                            tools=None,
+                            tool_choice=None,
+                            max_tokens=2048,
+                            temperature=0,
+                        ),
+                    ),
+                    timeout=120,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Answer phase timed out")
+            except Exception as e:
+                logger.error("Answer phase failed: %s", e)
+            else:
+                if response and response.choices:
+                    content = response.choices[0].message.content
+                    if content:
+                        logger.info("Answer phase — content=%r", content[:200])
+                        return content
+
+        # --- Fallback if LLM failed ---
         return await self._fallback(question)
 
     async def _search_bylaw(self, **kwargs) -> Optional[str]:
@@ -410,9 +451,9 @@ class AdvisorService:
     async def _fallback(self, question: str) -> str:
         try:
             return await self._llm_service.generate(
-                system_prompt=ADVISOR_SYSTEM_PROMPT + "\n\n" + RESPONSE_FORMAT_INSTRUCTION,
+                system_prompt="You do NOT have tools available. Answer directly from your knowledge.\n\n" + ADVISOR_SYSTEM_PROMPT + "\n\n" + RESPONSE_FORMAT_INSTRUCTION + "\n\n" + CRITICAL_RULES,
                 user_prompt=question,
-                max_output_tokens=1024,
+                max_output_tokens=2048,
                 temperature=0.3,
             )
         except Exception as e:

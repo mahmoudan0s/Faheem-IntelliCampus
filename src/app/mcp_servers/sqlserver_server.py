@@ -129,12 +129,13 @@ async def get_current_courses(student_code: str) -> str:
             cl.Day,
             cl.StartTime,
             cl.EndTime,
-            cl.Room,
+            r.RoomName,
             u.FullName AS Instructor
         FROM StudentCourses sc
         JOIN Courses c ON sc.CourseId = c.CourseId
         LEFT JOIN Classes cl ON sc.ClassId = cl.ClassId
         LEFT JOIN Users u ON cl.InstructorId = u.UserId
+        LEFT JOIN Rooms r ON cl.RoomId = r.RoomId
         WHERE sc.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
             AND sc.Status = 1
         ORDER BY c.CourseCode
@@ -334,12 +335,13 @@ async def get_weekly_schedule(student_code: str) -> str:
             cl.Day,
             cl.StartTime,
             cl.EndTime,
-            cl.Room,
+            r.RoomName,
             u.FullName AS Instructor
         FROM StudentCourses sc
         JOIN Classes cl ON sc.ClassId = cl.ClassId
         JOIN Courses c ON sc.CourseId = c.CourseId
         LEFT JOIN Users u ON cl.InstructorId = u.UserId
+        LEFT JOIN Rooms r ON cl.RoomId = r.RoomId
         WHERE sc.StudentId = (SELECT UserId FROM Students WHERE StudentCode = :student_code)
             AND sc.Status = 1
         ORDER BY cl.Day, cl.StartTime
