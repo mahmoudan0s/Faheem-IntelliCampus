@@ -1,12 +1,13 @@
-# min-rag
+#  "Faheem" / IntelliCampus Academic Advisor
 
-A Simple Retrieval Augmented Generation System
+A RAG (Retrieval-Augmented Generation) AI academic advisor for university students. It combines vector search over academic regulations (pgvector), student data from SQL Server, and LLM reasoning to answer questions about registration, GPA, graduation, etc. It also has a course materials RAG feature for uploading PDFs/images, chunking, embedding, and Q&A over course content, Smart notes Enhance student notes with course material and summarize lectures with a suggestion for sources.
 
 ## Requirements
 
 - Python 3.8 or later
 
 #### Install Python using MiniConda
+
 
 1) Download and install MiniConda from [here](https://docs.anaconda.com/free/miniconda/#quick-command-line-install)
 2) Create a new environment using the following command:
