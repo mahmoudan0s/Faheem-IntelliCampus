@@ -110,7 +110,6 @@ TOOLS
 - `sqlserver__get_elective_bucket_courses` — Courses available in an elective bucket
 - `sqlserver__get_student_departments` — Departments the student is enrolled in
 - `sqlserver__get_department_info` — Department details
-- `sqlserver__get_specialization_info` — Specialization details
 - `sqlserver__get_completed_hours` — Total completed credit hours
 - `sqlserver__get_registered_hours` — Total registered credit hours
 - `sqlserver__get_student_attendance` — Attendance records

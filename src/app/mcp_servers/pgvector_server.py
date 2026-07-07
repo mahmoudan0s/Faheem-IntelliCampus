@@ -137,8 +137,8 @@ def _match_filters(
     requirement_type: Optional[str] = None,
 ) -> bool:
     if department:
-        dept_val = str(meta.get("department") or "").lower().replace("_", "").replace("-", "")
-        dept_filter = department.lower().replace("_", "").replace("-", "")
+        dept_val = str(meta.get("department") or "").lower().replace("_", "").replace("-", "").replace(" ", "")
+        dept_filter = department.lower().replace("_", "").replace("-", "").replace(" ", "")
         if dept_filter not in dept_val and dept_val not in dept_filter:
             return False
     if course_code and str(meta.get("course_code", "")).upper() != course_code.upper():
@@ -311,6 +311,32 @@ async def search_bylaw_chunks(
             meta_results = await _metadata_search(query, top_k, department, course_code, chunk_type, level, semester, category, section, requirement_type)
             if meta_results:
                 results = meta_results
+
+        # --- Fallback: if department filter was too restrictive, retry without it ---
+        if not results and department:
+            results = []
+            if embedding:
+                vec_results = await _vectordb_client.search_by_vector(
+                    collection_name="bylaw", vector=embedding, limit=top_k * 3
+                )
+                if vec_results:
+                    for doc in vec_results:
+                        if doc.score < -999:
+                            continue
+                        meta = doc.metadata or {}
+                        if not _match_filters(meta, None, course_code, chunk_type, level, semester, category, section, requirement_type):
+                            continue
+                        results.append(_build_result(doc.text, doc.score, meta))
+                        if len(results) >= top_k:
+                            break
+            if not results:
+                kw_results = await _keyword_search(query, top_k, None, course_code, chunk_type, level, semester, category, section, requirement_type)
+                if kw_results:
+                    results = kw_results
+            if not results:
+                meta_results = await _metadata_search(query, top_k, None, course_code, chunk_type, level, semester, category, section, requirement_type)
+                if meta_results:
+                    results = meta_results
 
         if not results:
             return "No matching bylaw content found in the database."

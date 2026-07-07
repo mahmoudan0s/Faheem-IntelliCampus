@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import FastAPI
@@ -40,6 +41,25 @@ async def startup_span():
     app.groq_generation_client = llm_provider_factory.create(provider="GROQ")
     if app.groq_generation_client:
         app.groq_generation_client.set_generation_model(model_id=settings.GROQ_MODEL_ID)
+
+    # Warm up the generation LLM so the first user request isn't hit by a cold-start model load
+    try:
+        logger.info("Warming up generation LLM (cold-start)...")
+        warmup_loop = asyncio.get_event_loop()
+        await asyncio.wait_for(
+            warmup_loop.run_in_executor(
+                None,
+                lambda: app.generation_client.chat_completion(
+                    messages=[{"role": "user", "content": "ping"}],
+                    max_tokens=5,
+                    temperature=0,
+                ),
+            ),
+            timeout=120,
+        )
+        logger.info("Generation LLM warmup complete")
+    except Exception as e:
+        logger.warning("Generation LLM warmup skipped: %s — first request may be slow", e)
 
     app.embedding_client = llm_provider_factory.create(provider=settings.EMBEDDING_BACKEND)
     app.embedding_client.set_embedding_model(

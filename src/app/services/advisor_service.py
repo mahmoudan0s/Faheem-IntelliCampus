@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from typing import Optional
 
 from app.prompts.advisor_prompt import ADVISOR_SYSTEM_PROMPT, RESPONSE_FORMAT_INSTRUCTION
@@ -121,8 +122,7 @@ class AdvisorService:
                           department: Optional[str] = None) -> list:
         tool_lines = [
             json.dumps({"name": t["function"]["name"],
-                        "description": t["function"]["description"],
-                        "parameters": t["function"]["parameters"]})
+                        "description": t["function"]["description"]})
             for t in tools
         ]
         prompt = TOOL_RANKER_SYSTEM_PROMPT.replace("{tools_json}", "\n".join(tool_lines))
@@ -136,6 +136,7 @@ class AdvisorService:
 
         try:
             loop = asyncio.get_running_loop()
+            t0 = time.perf_counter()
             response = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
@@ -152,8 +153,9 @@ class AdvisorService:
                 ),
                 timeout=TOOL_RANKER_TIMEOUT,
             )
+            logger.info("Tool ranker completed in %.2fs", time.perf_counter() - t0)
         except asyncio.TimeoutError:
-            logger.warning("Tool ranker timed out after %ds", TOOL_RANKER_TIMEOUT)
+            logger.warning("Tool ranker timed out after %ds (elapsed %.2fs)", TOOL_RANKER_TIMEOUT, time.perf_counter() - t0)
             return self._keyword_tool_fallback(question, tools)
         except Exception as e:
             logger.warning("Tool ranker failed: %s", e)
@@ -213,7 +215,7 @@ class AdvisorService:
                         "parameters": {"type": "object", "properties": props, "required": list(props.keys())},
                     },
                 })
-            _fb("sqlserver__get_student_profile", "Get full student profile: name, email, level, GPA, program, department, specialization", {"student_code": {"type": "string"}})
+            _fb("sqlserver__get_student_profile", "Get full student profile: name, email, level, GPA, program, department", {"student_code": {"type": "string"}})
             _fb("sqlserver__get_student_department", "Get student's primary department", {"student_code": {"type": "string"}})
             _fb("sqlserver__get_current_courses", "Get registered courses with schedule and instructor", {"student_code": {"type": "string"}})
             _fb("sqlserver__get_completed_courses", "Get completed/passed courses (Status=2)", {"student_code": {"type": "string"}})
@@ -262,7 +264,7 @@ class AdvisorService:
         # --- Rank tools (select up to 5 most relevant) ---
         selected_names = await self._rank_tools(question, groq_tools, profile_text, department)
         selected_tools = self._filter_tools(groq_tools, selected_names)
-        current_timeout = 30
+        current_timeout = 60
         logger.info("Tool ranker — using %d/%d tools: %s, timeout=%ds",
                     len(selected_tools), len(groq_tools),
                     [t["function"]["name"] for t in selected_tools], current_timeout)
@@ -282,6 +284,7 @@ class AdvisorService:
             try:
                 tc = "auto" if selected_tools else None
                 loop = asyncio.get_running_loop()
+                t0 = time.perf_counter()
                 response = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
@@ -295,8 +298,9 @@ class AdvisorService:
                     ),
                     timeout=current_timeout,
                 )
+                logger.info("LLM call completed in %.2fs (attempt %d)", time.perf_counter() - t0, attempt + 1)
             except asyncio.TimeoutError:
-                logger.warning("LLM timed out after %ds (attempt %d)", current_timeout, attempt + 1)
+                logger.warning("LLM timed out after %ds (attempt %d, elapsed %.2fs)", current_timeout, attempt + 1, time.perf_counter() - t0)
                 continue
             except Exception as e:
                 logger.error("LLM API call failed (attempt %d): %s", attempt + 1, e)
@@ -393,6 +397,7 @@ class AdvisorService:
             ]
             try:
                 loop = asyncio.get_running_loop()
+                t0 = time.perf_counter()
                 response = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
@@ -406,8 +411,9 @@ class AdvisorService:
                     ),
                     timeout=120,
                 )
+                logger.info("Answer phase completed in %.2fs", time.perf_counter() - t0)
             except asyncio.TimeoutError:
-                logger.warning("Answer phase timed out")
+                logger.warning("Answer phase timed out after 120s (elapsed %.2fs)", time.perf_counter() - t0)
             except Exception as e:
                 logger.error("Answer phase failed: %s", e)
             else:
@@ -450,8 +456,22 @@ class AdvisorService:
 
     async def _fallback(self, question: str) -> str:
         try:
+            fallback_prompt = (
+                "You are Faheem, the official Student Academic Advisor for the Faculty of Computers and Artificial Intelligence.\n\n"
+                "CRITICAL — You do NOT have any tools available right now. You cannot call sqlserver or pgvector tools.\n"
+                "Do NOT fabricate, simulate, or role-play tool calls, tool names, JSON tool results, chunk_id values, or retrieved data.\n"
+                "Do NOT write ```json blocks that look like tool output.\n"
+                "If you can answer from general academic knowledge, do so directly and honestly.\n"
+                "If the question requires the student's personal records or the official bylaw (which you cannot access without tools), "
+                "say clearly that you cannot reach the records right now and the student should try again shortly.\n\n"
+                "Use this response format:\n\n"
+                "## Answer\n\n"
+                "Direct answer to the student's question, or an honest statement that the data is unavailable right now.\n\n"
+                "## Recommendation\n\n"
+                "What the student should do next.\n"
+            )
             return await self._llm_service.generate(
-                system_prompt="You do NOT have tools available. Answer directly from your knowledge.\n\n" + ADVISOR_SYSTEM_PROMPT + "\n\n" + RESPONSE_FORMAT_INSTRUCTION + "\n\n" + CRITICAL_RULES,
+                system_prompt=fallback_prompt,
                 user_prompt=question,
                 max_output_tokens=2048,
                 temperature=0.3,

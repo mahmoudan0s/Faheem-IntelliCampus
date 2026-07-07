@@ -69,6 +69,38 @@ class GroqProvider(LLMInterface):
 
         return response.choices[0].message.content
 
+    def chat_completion(self, messages: list, tools: list = None, tool_choice: str = None,
+                        model: str = None, max_tokens: int = None,
+                        temperature: float = None):
+        if not self.client:
+            self.logger.error("Groq client was not set")
+            return None
+
+        model = model or self.generation_model_id
+        if not model:
+            self.logger.error("Generation model for Groq was not set")
+            return None
+
+        max_tokens = max_tokens or self.default_generation_max_output_tokens
+        temperature = temperature if temperature is not None else self.default_generation_temperature
+
+        self.logger.info("=== Groq API Request ===")
+        self.logger.info("Model: %s", model)
+        self.logger.info("Messages: %d msgs", len(messages))
+        self.logger.info("Tools: %s", [t["function"]["name"] for t in tools] if tools else "NONE")
+        self.logger.info("Tool choice: %s", tool_choice)
+        self.logger.info("Max tokens: %s", max_tokens)
+
+        result = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools if tools else None,
+            tool_choice=tool_choice or ("auto" if tools else None),
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        return result
 
     def embed_text(self, text: Union[str, List[str]], document_type: str = None):
         self.logger.warning("Groq does not support embeddings natively")
