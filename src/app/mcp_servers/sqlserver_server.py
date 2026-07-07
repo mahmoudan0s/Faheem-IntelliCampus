@@ -31,13 +31,26 @@ def _get_engine() -> Engine:
     global _engine
     if _engine is None:
         settings = get_settings()
-        conn_str = (
-            f"mssql+pyodbc://{settings.SQL_SERVER_USERNAME}:{quote_plus(settings.SQL_SERVER_PASSWORD)}"
-            f"@{settings.SQL_SERVER_HOST}:{settings.SQL_SERVER_PORT}"
-            f"/{settings.SQL_SERVER_DATABASE}"
-            f"?driver={settings.SQL_SERVER_DRIVER.replace(' ', '+')}"
-            f"&TrustServerCertificate=yes"
-        )
+        driver = settings.SQL_SERVER_DRIVER
+        database = settings.SQL_SERVER_DATABASE
+
+        if not settings.SQL_SERVER_USERNAME:
+            odbc_connect = (
+                f"DRIVER={{{driver}}};"
+                f"SERVER={settings.SQL_SERVER_HOST};"
+                f"DATABASE={database};"
+                f"Trusted_Connection=yes;"
+                f"TrustServerCertificate=yes"
+            )
+            conn_str = f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc_connect)}"
+        else:
+            conn_str = (
+                f"mssql+pyodbc://{settings.SQL_SERVER_USERNAME}:{quote_plus(settings.SQL_SERVER_PASSWORD)}"
+                f"@{settings.SQL_SERVER_HOST}:{settings.SQL_SERVER_PORT}"
+                f"/{database}"
+                f"?driver={driver.replace(' ', '+')}"
+                f"&TrustServerCertificate=yes"
+            )
         _engine = create_engine(conn_str, pool_pre_ping=True)
     return _engine
 
@@ -89,7 +102,7 @@ def _execute_query(sql: str, params: dict = None) -> str:
 
 @mcp.tool()
 async def get_student_profile(student_code: str) -> str:
-    """Get full student profile: name, email, level, GPA, program, department, specialization."""
+    """Get full student profile: name, email, level, GPA, program, department."""
     sql = """
         SELECT
             s.UserId,
@@ -103,13 +116,10 @@ async def get_student_profile(student_code: str) -> str:
             s.BylawId,
             s.DepartmentId,
             d.DepartmentName,
-            s.SpecializationId,
-            sp.Name AS SpecializationName,
             s.EnrollmentDate
         FROM Students s
         JOIN Users u ON s.UserId = u.UserId
         LEFT JOIN Departments d ON s.DepartmentId = d.DepartmentId
-        LEFT JOIN Specializations sp ON s.SpecializationId = sp.SpecializationId
         WHERE s.StudentCode = :student_code
     """
     return _execute_query(sql, {"student_code": student_code})
@@ -471,13 +481,6 @@ async def get_department_info(department_id: int) -> str:
     """Get detailed information about a department."""
     sql = "SELECT * FROM Departments WHERE DepartmentId = :department_id"
     return _execute_query(sql, {"department_id": department_id})
-
-
-@mcp.tool()
-async def get_specialization_info(specialization_id: int) -> str:
-    """Get detailed information about a specialization."""
-    sql = "SELECT * FROM Specializations WHERE SpecializationId = :specialization_id"
-    return _execute_query(sql, {"specialization_id": specialization_id})
 
 
 @mcp.tool()
